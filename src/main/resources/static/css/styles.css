@@ -1,0 +1,50 @@
+:root {
+    color-scheme: dark;
+    font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #080808;
+    color: #f7f7f7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 78% 30%, rgba(66, 133, 244, .25), transparent 28rem),
+                radial-gradient(circle at 70% 55%, rgba(234, 67, 53, .18), transparent 30rem), #080808;
+}
+
+.hero {
+    width: min(960px, calc(100% - 40px));
+    min-height: 100vh;
+    margin: 0 auto;
+    display: grid;
+    align-content: center;
+    gap: 18px;
+}
+
+.eyebrow { margin: 0; color: #aaa; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(3.5rem, 11vw, 8rem); line-height: .95; letter-spacing: -.07em; }
+h1 span {
+    background: linear-gradient(100deg, #4285f4, #ea4335 40%, #fbbc04 70%, #34a853);
+    background-clip: text;
+    color: transparent;
+}
+
+.subtitle { max-width: 560px; margin: 8px 0 30px; color: #c8c8c8; font-size: 1.1rem; line-height: 1.7; }
+.status-card {
+    width: fit-content;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 20px;
+    border: 1px solid #333;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .06);
+    backdrop-filter: blur(12px);
+}
+
+.status-dot { width: 12px; height: 12px; border-radius: 50%; background: #fbbc04; box-shadow: 0 0 14px currentColor; }
+.status-dot.online { background: #34a853; }
+.status-dot.offline { background: #ea4335; }
+.status-label { margin: 0 0 3px; color: #8f8f8f; font-size: .8rem; }

@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: hack-the-beat
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    root: INFO
+    com.hackthebeat: DEBUG
