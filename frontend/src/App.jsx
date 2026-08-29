@@ -111,6 +111,7 @@ function Main({ profile }) {
   const [joined, setJoined] = useState(null)
   const [offset, setOffset] = useState(0)
   const [poke, setPoke] = useState(null)
+  const [signal, setSignal] = useState(null)
   const [pendingRoom, setPendingRoom] = useState(
     () => new URLSearchParams(window.location.search).get('room'))
 
@@ -146,6 +147,7 @@ function Main({ profile }) {
           setPoke(data)
           setTimeout(() => setPoke(null), 3500)
         })
+        client.subscribe(`/topic/signal/${profile.clientId}`, msg => setSignal(JSON.parse(msg.body)))
       },
     })
     client.activate()
@@ -219,7 +221,7 @@ function Main({ profile }) {
   if (joined) {
     view = <PlayerView key={joined.id} channel={joined} offset={offset} channels={channels}
       roomName={room?.name} profile={profile} onLeave={leave} onSwitch={switchTo}
-      onCreateBranch={createBranch} />
+      onCreateBranch={createBranch} signal={signal} />
   } else if (room) {
     view = <BranchView room={room} channels={channels.filter(c => c.roomId === room.id)}
       offset={offset} onJoin={join} onBack={() => setRoom(null)} onCreate={createBranch} />
@@ -455,7 +457,7 @@ function Form({ fields, submitLabel, onSubmit, onClose }) {
   )
 }
 
-function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch, onCreateBranch }) {
+function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch, onCreateBranch, signal }) {
   const playerRef = useRef(null)
   const loadedIdRef = useRef(channel.youtubeVideoId)
   const live = channels.find(c => c.id === channel.id) || channel
@@ -463,6 +465,10 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
   liveRef.current = live
   const [showAdd, setShowAdd] = useState(false)
   const [showBranch, setShowBranch] = useState(false)
+  const [speakingTo, setSpeakingTo] = useState(null)
+  const peerRef = useRef(null)
+  const streamRef = useRef(null)
+  const remoteAudioRef = useRef(null)
   let ownerKey = null
   try { ownerKey = localStorage.getItem(`bt_owner_${channel.id}`) } catch {}
   const isOwner = !!ownerKey
@@ -492,6 +498,70 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       body: JSON.stringify({ toClientId: r.clientId, fromNickname: profile.nickname, fromEmoji: profile.emoji }),
     })
   }
+  const sendSignal = (toClientId, payload) => fetch(`${API}/signal`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, toClientId, fromClientId: profile.clientId,
+      fromNickname: profile.nickname, fromEmoji: profile.emoji }),
+  })
+  const makePeer = (targetId) => {
+    const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    peer.onicecandidate = e => e.candidate && sendSignal(targetId, { type: 'candidate', candidate: e.candidate })
+    peer.ontrack = e => {
+      remoteAudioRef.current.srcObject = e.streams[0]
+      remoteAudioRef.current.play().catch(() => {})
+    }
+    peerRef.current = peer
+    return peer
+  }
+  const startWhisper = async (r) => {
+    if (speakingTo) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      const peer = makePeer(r.clientId)
+      stream.getTracks().forEach(track => peer.addTrack(track, stream))
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+      await sendSignal(r.clientId, { type: 'offer', sdp: offer })
+      setSpeakingTo(r.clientId)
+      playerRef.current?.setVolume?.(35)
+    } catch { alert('마이크 권한이 필요합니다') }
+  }
+  const stopWhisper = (targetId = speakingTo) => {
+    if (targetId) sendSignal(targetId, { type: 'hangup' })
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    peerRef.current?.close()
+    streamRef.current = null
+    peerRef.current = null
+    setSpeakingTo(null)
+    playerRef.current?.setVolume?.(100)
+  }
+
+  useEffect(() => {
+    if (!signal) return
+    const handle = async () => {
+      if (signal.type === 'offer') {
+        peerRef.current?.close()
+        const peer = makePeer(signal.fromClientId)
+        await peer.setRemoteDescription(signal.sdp)
+        const answer = await peer.createAnswer()
+        await peer.setLocalDescription(answer)
+        await sendSignal(signal.fromClientId, { type: 'answer', sdp: answer })
+        playerRef.current?.setVolume?.(35)
+      } else if (signal.type === 'answer' && peerRef.current) {
+        await peerRef.current.setRemoteDescription(signal.sdp)
+      } else if (signal.type === 'candidate' && peerRef.current) {
+        await peerRef.current.addIceCandidate(signal.candidate).catch(() => {})
+      } else if (signal.type === 'hangup') {
+        peerRef.current?.close(); peerRef.current = null
+        remoteAudioRef.current.srcObject = null
+        playerRef.current?.setVolume?.(100)
+      }
+    }
+    handle().catch(console.error)
+  }, [signal])
+
+  useEffect(() => () => stopWhisper(), [])
 
   // 탭을 닫아도 퇴장 처리
   useEffect(() => {
@@ -578,13 +648,22 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       {others.length > 0 && (
         <div className="riders">
           {others.map(r => (
-            <button key={r.clientId} className="rider" onClick={() => pokeUser(r)}
-              title="콕 찌르기">
-              {r.emoji} {r.nickname} <span className="poke-hint">콕</span>
-            </button>
+            <div key={r.clientId} className="rider-wrap">
+              <button className="rider" onClick={() => pokeUser(r)} title="콕 찌르기">
+                {r.emoji} {r.nickname} <span className="poke-hint">콕</span>
+              </button>
+              <button className={`talk ${speakingTo === r.clientId ? 'active' : ''}`}
+                onPointerDown={() => startWhisper(r)}
+                onPointerUp={() => stopWhisper(r.clientId)}
+                onPointerCancel={() => stopWhisper(r.clientId)}
+                onPointerLeave={() => speakingTo === r.clientId && stopWhisper(r.clientId)}>
+                {speakingTo === r.clientId ? '말하는 중…' : '꾹 눌러 말하기'}
+              </button>
+            </div>
           ))}
         </div>
       )}
+      <audio ref={remoteAudioRef} autoPlay />
       {isOwner && (
         <div className="player-actions">
           <button onClick={() => setShowAdd(true)}>+ 곡 추가</button>

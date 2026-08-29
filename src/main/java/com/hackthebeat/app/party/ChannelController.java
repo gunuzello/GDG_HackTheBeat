@@ -162,6 +162,13 @@ public class ChannelController {
         return Map.of("status", "ok");
     }
 
+    @PostMapping("/signal")
+    public Map<String, String> signal(@RequestBody Map<String, Object> body) {
+        Object target = body.get("toClientId");
+        if (target != null) messaging.convertAndSend("/topic/signal/" + target, body);
+        return Map.of("status", "ok");
+    }
+
     private void broadcast() {
         messaging.convertAndSend("/topic/channels", listChannels());
         messaging.convertAndSend("/topic/rooms", listRooms());

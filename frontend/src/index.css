@@ -168,6 +168,9 @@ body {
   background: #16162A; border: 1px solid #333; color: #fff; cursor: pointer;
 }
 .rider:active { border-color: var(--channel-color); }
+.rider-wrap { display: flex; gap: 5px; align-items: center; }
+.talk { padding: 7px 10px; border-radius: 18px; border: 1px solid #555; background: #222238; color: #ddd; cursor: pointer; touch-action: none; }
+.talk.active { background: #FF2E7E; border-color: #FF2E7E; color: #fff; }
 .poke-hint { color: var(--channel-color); font-weight: 700; margin-left: 4px; }
 
 .player-actions { display: flex; gap: 10px; }
