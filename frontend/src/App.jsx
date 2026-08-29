@@ -485,6 +485,7 @@ function Form({ fields, submitLabel, onSubmit, onClose }) {
 
 function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch, onCreateBranch, signal }) {
   const playerRef = useRef(null)
+  const miniTreeRef = useRef(null)
   const loadedIdRef = useRef(channel.youtubeVideoId)
   const live = channels.find(c => c.id === channel.id) || channel
   const liveRef = useRef(live)
@@ -499,6 +500,14 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
   try { ownerKey = localStorage.getItem(`bt_owner_${channel.id}`) } catch {}
   const isOwner = !!ownerKey
   const others = (live.riders || []).filter(r => r.clientId !== profile.clientId)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const tree = miniTreeRef.current
+      if (tree) tree.scrollLeft = tree.scrollWidth - tree.clientWidth
+    }, 120)
+    return () => clearInterval(timer)
+  }, [])
 
   const requestNext = () => {
     fetch(`${API}/channels/${channel.id}/next`, {
@@ -667,7 +676,7 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       </p>
       <div className="yt-box"><div id="yt-player" /></div>
       {/* 이 파티룸의 나무: 탭하면 그 브랜치로 바로 이동 */}
-      <div className="mini-tree">
+      <div className="mini-tree" ref={miniTreeRef}>
         <TreeSvg channels={channels.filter(c => c.roomId === channel.roomId)}
           offset={offset} onJoin={onSwitch} scale={0.55} currentId={channel.id} />
       </div>
