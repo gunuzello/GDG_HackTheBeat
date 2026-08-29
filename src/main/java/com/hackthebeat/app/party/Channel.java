@@ -14,6 +14,7 @@ public class Channel {
     public String colorHex;
     public boolean isMain;
     public String parentId;
+    public double parentElapsedSecondsAtCreation;
     public final List<String> queue = new CopyOnWriteArrayList<>();
     private final List<Map<String, String>> riders = new CopyOnWriteArrayList<>();
     private final Map<String, Long> lastSeen = new ConcurrentHashMap<>();
@@ -24,7 +25,7 @@ public class Channel {
     public void setOwnerKey(String key) { this.ownerKey = key; }
 
     public Channel(String id, String roomId, String name, String videoId, String colorHex, boolean isMain,
-                   String parentId) {
+                   String parentId, double parentElapsedSecondsAtCreation) {
         this.id = id;
         this.roomId = roomId;
         this.name = name;
@@ -33,6 +34,7 @@ public class Channel {
         this.colorHex = colorHex;
         this.isMain = isMain;
         this.parentId = parentId;
+        this.parentElapsedSecondsAtCreation = parentElapsedSecondsAtCreation;
     }
 
     public int getListenerCount() { return riders.size(); }
@@ -64,5 +66,6 @@ public class Channel {
     public String getColorHex() { return colorHex; }
     public boolean getIsMain() { return isMain; }
     public String getParentId() { return parentId; }
+    public double getParentElapsedSecondsAtCreation() { return parentElapsedSecondsAtCreation; }
     public List<String> getQueue() { return queue; }
 }

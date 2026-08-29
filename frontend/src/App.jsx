@@ -336,7 +336,6 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
 // 브랜치 화면과 플레이어 화면에서 공용으로 쓰는 나무 시각화
 function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   const [, setTick] = useState(0)
-  // 나무가 "자라는" 것을 보여주기 위한 리렌더 타이머
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 2000)
     return () => clearInterval(t)
@@ -345,95 +344,83 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   const main = channels.find(c => c.isMain)
   const subs = channels.filter(c => !c.isMain)
   const now = Date.now() + offset
-  const TY = 240
-  const trunkW = main ? Math.min(16 + main.listenerCount * 2, 34) : 16
+  if (!main) return null
 
-  // 자라남: 재생된 시간만큼 트렁크가 오른쪽으로 자람 (최대 10분까지)
-  const mainElapsed = main ? Math.min((now - main.startedAt) / 1000, 600) : 0
-  const trunkTip = Math.max(300 + mainElapsed * 0.9, 170 + subs.length * 120 + 90)
-  const W = Math.max(700, trunkTip + 150)
+  const nodes = new Map()
+  const children = new Map()
+  subs.forEach(ch => children.set(ch.parentId, [...(children.get(ch.parentId) || []), ch]))
+  const mainElapsed = Math.max(0, (now - main.startedAt) / 1000)
+  const mainLength = Math.max(100, Math.min(mainElapsed, 900) * 0.75)
+  nodes.set(main.id, { x1: 35, y1: 260, x2: 35 + mainLength, y2: 260, angle: 0, depth: 0 })
+
+  const layoutChildren = (parent) => {
+    const parentNode = nodes.get(parent.id)
+    const list = children.get(parent.id) || []
+    list.forEach((ch, index) => {
+      const splitDistance = Math.max(25, Math.min(
+        ch.parentElapsedSecondsAtCreation * 0.75,
+        Math.hypot(parentNode.x2 - parentNode.x1, parentNode.y2 - parentNode.y1),
+      ))
+      const x1 = parentNode.x1 + Math.cos(parentNode.angle) * splitDistance
+      const y1 = parentNode.y1 + Math.sin(parentNode.angle) * splitDistance
+      const direction = index % 2 === 0 ? -1 : 1
+      const angle = parentNode.angle + direction * (0.48 + Math.floor(index / 2) * 0.16)
+      const elapsed = Math.max(0, (now - ch.startedAt) / 1000)
+      const length = Math.max(55, Math.min(elapsed, 900) * 0.55)
+      nodes.set(ch.id, {
+        x1, y1,
+        x2: x1 + Math.cos(angle) * length,
+        y2: y1 + Math.sin(angle) * length,
+        angle,
+        depth: parentNode.depth + 1,
+      })
+      layoutChildren(ch)
+    })
+  }
+  layoutChildren(main)
+  const allNodes = [...nodes.values()]
+  const W = Math.max(700, ...allNodes.map(n => n.x2 + 160))
+  const minY = Math.min(0, ...allNodes.map(n => n.y2 - 80))
+  const maxY = Math.max(520, ...allNodes.map(n => n.y2 + 80))
+  const H = maxY - minY
+
+  const renderChannel = (ch) => {
+    const node = nodes.get(ch.id)
+    const width = ch.isMain
+      ? Math.min(16 + ch.listenerCount * 2, 34)
+      : Math.min(4 + ch.listenerCount * 3, 22)
+    const midX = (node.x1 + node.x2) / 2
+    const midY = (node.y1 + node.y2) / 2
+    const bend = ch.isMain ? 8 : (node.y2 < node.y1 ? -18 : 18)
+    return (
+      <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
+        <path d={`M ${node.x1} ${node.y1} Q ${midX} ${midY + bend} ${node.x2} ${node.y2}`}
+          fill="none" stroke={ch.colorHex} strokeWidth={width} strokeLinecap="round"
+          filter="url(#neonGlow)" style={{ transition: 'all 0.4s ease' }} />
+        <circle cx={node.x2} cy={node.y2} r={Math.max(9, width * 0.7)}
+          fill={ch.colorHex} filter="url(#neonGlow)" />
+        {currentId === ch.id && <circle cx={node.x2} cy={node.y2} r={Math.max(16, width)}
+          fill="none" stroke="#fff" strokeWidth="2" />}
+        <text x={node.x2} y={node.y2 - 24} textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700">
+          {ch.name} · {ch.listenerCount}명
+        </text>
+        {(ch.riders || []).slice(0, 5).map((r, j) => (
+          <text key={r.clientId} x={node.x2 - 20 - j * 22} y={node.y2 + 24} fontSize="14">{r.emoji}</text>
+        ))}
+      </g>
+    )
+  }
 
   return (
-    <svg viewBox={`0 0 ${W} 480`} width={W * scale} height={480 * scale}
+    <svg viewBox={`0 ${minY} ${W} ${H}`} width={W * scale} height={H * scale}
       style={{ display: 'block', minWidth: scale === 1 ? '100%' : undefined }}>
       <defs>
-        <filter id="neonGlow" filterUnits="userSpaceOnUse"
-          x="-100" y="-100" width={W + 200} height="680">
+        <filter id="neonGlow" filterUnits="userSpaceOnUse" x="-100" y={minY - 100} width={W + 200} height={H + 200}>
           <feGaussianBlur stdDeviation="4" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
-        {main && subs.map((ch, i) => (
-          <linearGradient key={ch.id} id={`grad-${ch.id}`}
-            x1="0" y1="0" x2="1" y2="1"
-            gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor={main.colorHex} />
-            <stop offset="100%" stopColor={ch.colorHex} />
-          </linearGradient>
-        ))}
       </defs>
-
-      {main && (
-        <g onClick={() => onJoin(main)} style={{ cursor: 'pointer' }}>
-          {/* 왼쪽 뿌리에서 오른쪽으로, 재생 시간만큼 자라는 트렁크 */}
-          <path
-            d={`M 20 ${TY} C ${trunkTip * 0.36} ${TY - 14}, ${trunkTip * 0.66} ${TY + 14}, ${trunkTip} ${TY}`}
-            fill="none" stroke={main.colorHex}
-            strokeWidth={trunkW} strokeLinecap="round"
-            filter="url(#neonGlow)" className="trunk-pulse"
-            style={{ transition: 'stroke-width 0.4s ease' }} />
-          <circle cx={trunkTip + 5} cy={TY} r={Math.max(12, trunkW * 0.8)}
-            fill={main.colorHex} filter="url(#neonGlow)"
-            style={{ transition: 'r 0.4s ease' }} />
-          {currentId === main.id && (
-            <circle cx={trunkTip + 5} cy={TY} r={Math.max(12, trunkW * 0.8) + 7}
-              fill="none" stroke="#fff" strokeWidth="2" opacity="0.85" />
-          )}
-          <text x={trunkTip + 5} y={TY - 40} textAnchor="middle" fill="#fff" fontSize="16" fontWeight="700">
-            {main.name} · {main.listenerCount}명
-          </text>
-          {(main.riders || []).slice(0, 5).map((r, j) => (
-            <text key={r.clientId} x={trunkTip - 30 - j * 24} y={TY - 16} fontSize="15">{r.emoji}</text>
-          ))}
-        </g>
-      )}
-
-      {subs.map((ch, i) => {
-        const parentIndex = subs.findIndex(candidate => candidate.id === ch.parentId)
-        const depth = parentIndex >= 0 ? 2 : 1
-        const side = i % 2 === 0 ? 1 : -1
-        const parentX = parentIndex >= 0 ? 260 + parentIndex * 105 : 170 + i * 105
-        const parentY = parentIndex >= 0 ? TY + (parentIndex % 2 === 0 ? 1 : -1) * 120 : TY
-        const branchX = parentX
-        // 브랜치도 자기 곡이 재생된 만큼 자람
-        const bElapsed = Math.min((now - ch.startedAt) / 1000, 600)
-        const bLen = 60 + bElapsed * 0.12
-        const endX = branchX + 55 + bLen * 0.4
-        const endY = parentY + side * (55 + bLen * 0.45 / depth)
-        const width = Math.min(3 + ch.listenerCount * 3, 22)
-        return (
-          <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
-            <path
-              d={`M ${branchX} ${parentY} C ${branchX + 8} ${parentY + side * 45}, ${endX - 35} ${endY - side * 35}, ${endX} ${endY}`}
-              fill="none" stroke={`url(#grad-${ch.id})`}
-              strokeWidth={width} strokeLinecap="round"
-              filter="url(#neonGlow)"
-              style={{ transition: 'stroke-width 0.4s ease' }} />
-            <circle cx={endX} cy={endY} r="10" fill={ch.colorHex} filter="url(#neonGlow)" />
-            {currentId === ch.id && (
-              <circle cx={endX} cy={endY} r="17" fill="none" stroke="#fff" strokeWidth="2" opacity="0.85" />
-            )}
-            <text x={endX} y={endY + (side > 0 ? 32 : -24)} textAnchor="middle" fill="#fff" fontSize="13">
-              {ch.name} · {ch.listenerCount}명
-            </text>
-            {(ch.riders || []).slice(0, 4).map((r, j) => (
-              <text key={r.clientId} x={endX - 22 - j * 22} y={endY + (side > 0 ? -14 : 24)} fontSize="14">{r.emoji}</text>
-            ))}
-          </g>
-        )
-      })}
+      {[main, ...subs].map(renderChannel)}
     </svg>
   )
 }

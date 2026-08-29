@@ -41,7 +41,7 @@ public class ChannelController {
         rooms.put(roomId, room);
         String color = PALETTE[colorIdx.getAndIncrement() % PALETTE.length];
         Channel main = new Channel("main-" + roomId, roomId, "DJ MAIN",
-                videoId == null || videoId.isBlank() ? DEFAULT_VIDEO : videoId, color, true, null);
+                videoId == null || videoId.isBlank() ? DEFAULT_VIDEO : videoId, color, true, null, 0);
         main.setOwnerKey(UUID.randomUUID().toString());
         channels.put(main.id, main);
         return Map.of("id", room.id(), "name", room.name(),
@@ -91,15 +91,18 @@ public class ChannelController {
     public Map<String, Object> create(@PathVariable String roomId, @RequestBody Map<String, String> body) {
         if (!rooms.containsKey(roomId)) throw new IllegalArgumentException("존재하지 않는 파티룸입니다.");
         String parentId = body.get("parentChannelId");
-        Channel requestedParent = channels.get(parentId);
+        Channel requestedParent = parentId == null ? null : channels.get(parentId);
         if (requestedParent == null || !requestedParent.roomId.equals(roomId)) {
-            parentId = channels.values().stream()
+            requestedParent = channels.values().stream()
                     .filter(c -> c.roomId.equals(roomId) && c.isMain)
-                    .map(c -> c.id).findFirst().orElseThrow();
+                    .findFirst().orElseThrow();
+            parentId = requestedParent.id;
         }
+        double parentElapsed = Math.max(0,
+                (System.currentTimeMillis() - requestedParent.startedAt) / 1000.0);
         String color = PALETTE[colorIdx.getAndIncrement() % PALETTE.length];
         Channel ch = new Channel(UUID.randomUUID().toString().substring(0, 8), roomId,
-                body.get("name"), body.get("youtubeVideoId"), color, false, parentId);
+                body.get("name"), body.get("youtubeVideoId"), color, false, parentId, parentElapsed);
         ch.setOwnerKey(UUID.randomUUID().toString());
         channels.put(ch.id, ch);
         broadcast();
