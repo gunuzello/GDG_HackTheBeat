@@ -19,10 +19,11 @@
 
 ### 프론트엔드
 
-- 별도 빌드 과정이 필요 없는 HTML, CSS, JavaScript 구조 구성
-- ES Module 기반 API 호출 모듈 분리
+- React와 Vite 기반 JavaScript 프로젝트 구성
+- React 컴포넌트 및 ES Module 기반 API 호출 모듈 분리
 - 백엔드 상태를 화면에서 확인할 수 있는 기본 랜딩 페이지 구현
-- Spring Boot가 프론트엔드 정적 파일을 함께 제공하도록 구성
+- 개발 환경에서 `/api` 요청을 Spring Boot로 전달하는 Vite 프록시 구성
+- Docker 빌드 시 React 결과물을 Spring Boot 정적 파일로 포함하도록 구성
 
 ### 개발 환경 및 검증
 
@@ -41,22 +42,26 @@
 ├── pom.xml
 ├── mvnw
 ├── Dockerfile
+├── frontend
+│   ├── package.json
+│   ├── vite.config.js
+│   └── src
+│       ├── api
+│       ├── App.jsx
+│       └── main.jsx
 └── src
     ├── main
     │   ├── java/com/hackthebeat/app
     │   │   ├── common
     │   │   └── health
-    │   └── resources
-    │       ├── application.yml
-    │       └── static
-    │           ├── css
-    │           └── js
+    │   └── resources/application.yml
     └── test/java/com/hackthebeat/app
 ```
 
 ## 주요 결정
 
-- 해커톤 시간 절약을 위해 프론트엔드와 백엔드를 하나의 Spring Boot 애플리케이션으로 실행한다.
+- 개발 중에는 React와 Spring Boot를 독립 실행해 빠른 새로고침을 사용한다.
+- 배포 시에는 React 빌드 결과물을 Spring Boot 애플리케이션에 포함해 단일 컨테이너로 실행한다.
 - 기능은 기술 계층별 패키지보다 `health`와 같은 기능별 패키지로 확장한다.
 - 데이터베이스, 인증, 외부 AI API는 주제가 정해진 뒤 필요한 것만 추가한다.
 - 비밀 값은 코드에 저장하지 않고 환경 변수 또는 로컬 설정 파일로 관리한다.
