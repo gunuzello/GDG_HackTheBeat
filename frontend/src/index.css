@@ -9,11 +9,14 @@ body {
 
 .screen { min-height: 100vh; display: flex; flex-direction: column; padding-bottom: 90px; }
 .logo {
-  text-align: center; padding: 22px 0 4px;
+  text-align: center; padding: 0 0 4px;
   font-size: 22px; letter-spacing: 6px;
   background: linear-gradient(90deg, #FF2E7E, #00E5FF);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+.brand { display: flex; flex-direction: column; align-items: center; padding: 14px 0 4px; }
+.brand img { width: 150px; height: 104px; object-fit: cover; border-radius: 18px; mix-blend-mode: screen; }
+.onboard .brand img { width: 220px; height: 153px; }
 .tagline { text-align: center; color: #888; font-size: 13px; margin-bottom: 18px; }
 
 /* 파티룸 랭킹 리스트 */

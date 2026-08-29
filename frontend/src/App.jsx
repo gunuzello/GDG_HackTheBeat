@@ -58,6 +58,15 @@ export default function App() {
 
 const EMOJIS = ['🎧', '🔥', '🪩', '⚡', '💃', '🕺', '🌙', '🍸', '🎷', '🌈', '😎', '🖤']
 
+function Brand() {
+  return (
+    <div className="brand">
+      <img src="/beattree-logo.png" alt="비트트리 음악 나무 로고" />
+      <h1 className="logo">BEATTREE</h1>
+    </div>
+  )
+}
+
 function Onboarding({ onDone }) {
   const [nickname, setNickname] = useState('')
   const [emoji, setEmoji] = useState('🎧')
@@ -81,7 +90,7 @@ function Onboarding({ onDone }) {
   }
   return (
     <div className="onboard">
-      <h1 className="logo">BEATTREE</h1>
+      <Brand />
       <p className="tagline">파티에서 뭐라고 불릴까요?</p>
       <input className="nick-input" placeholder="닉네임" value={nickname} maxLength={10}
         onChange={e => setNickname(e.target.value)} />
@@ -271,7 +280,7 @@ function RoomListView({ rooms, onEnter, onCreate }) {
   const lastRoom = last && rooms.find(r => r.id === last.id)
   return (
     <div className="screen">
-      <h1 className="logo">BEATTREE</h1>
+      <Brand />
       <p className="tagline">지금 가장 핫한 무소음 파티룸</p>
       {lastRoom && (
         <button className="resume-banner" onClick={() => onEnter(lastRoom)}>
