@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeatTree</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Gothic+A1:wght@400;500;700;900&family=Song+Myung&display=swap">
+<style>
+  :root{
+    --bg:#F7F1F5;
+    --surface:#FFFFFF;
+    --surface-2:#EFE3EC;
+    --surface-3:#E6D6E2;
+    --text:#211527;
+    --text-muted:#63525F;
+    --border:rgba(33,21,39,.14);
+    --amber:#B8721A;
+    --magenta:#A32E68;
+    --green:#2E7D4F;
+    --shadow:rgba(33,21,39,.12);
+    --spine-track:rgba(33,21,39,.16);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#150B1B;
+      --surface:#1F1327;
+      --surface-2:#2A1830;
+      --surface-3:#35213D;
+      --text:#F5ECF2;
+      --text-muted:#C3AEC1;
+      --border:rgba(245,236,242,.14);
+      --amber:#F5B942;
+      --magenta:#FF5FA8;
+      --green:#7ED9A0;
+      --shadow:rgba(0,0,0,.5);
+      --spine-track:rgba(245,236,242,.16);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#150B1B;
+    --surface:#1F1327;
+    --surface-2:#2A1830;
+    --surface-3:#35213D;
+    --text:#F5ECF2;
+    --text-muted:#C3AEC1;
+    --border:rgba(245,236,242,.14);
+    --amber:#F5B942;
+    --magenta:#FF5FA8;
+    --green:#7ED9A0;
+    --shadow:rgba(0,0,0,.5);
+    --spine-track:rgba(245,236,242,.16);
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Gothic A1',system-ui,-apple-system,sans-serif;
+    font-weight:400;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:'Do Hyeon','Gothic A1',system-ui,sans-serif;
+    font-weight:400;
+    text-wrap:balance;
+    letter-spacing:.01em;
+  }
+  a{color:inherit;}
+  img{max-width:100%;}
+  ::selection{background:var(--magenta);color:#fff;}
+
+  .eyebrow{
+    font-size:.78rem;
+    font-weight:700;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--magenta);
+    margin:0 0 .6rem;
+  }
+
+  /* ---------- layout shell ---------- */
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:0 clamp(20px,5vw,64px) 0 clamp(20px,5vw,120px);
+  }
+  .section{
+    padding:88px 0;
+    border-top:1px solid var(--border);
+  }
+  .section:first-child{border-top:none;}
+  .section-head{
+    display:flex;
+    flex-direction:column;
+    gap:.5rem;
+    margin-bottom:2.6rem;
+    max-width:640px;
+  }
+  .section-title{
+    font-size:clamp(1.7rem,3.2vw,2.4rem);
+    margin:0;
+  }
+  .section-desc{
+    color:var(--text-muted);
+    font-size:1.02rem;
+    max-width:60ch;
+    margin:0;
+  }
+
+  /* ---------- spine nav ---------- */
+  .spine{
+    position:fixed;
+    left:22px;
+    top:50%;
+    transform:translateY(-50%);
+    z-index:40;
+    display:flex;
+  }
+  .spine-track{
+    position:relative;
+    width:2px;
+    background:var(--spine-track);
+    border-radius:2px;
+    margin-right:14px;
+  }
+  .spine-progress{
+    position:absolute;
+    top:0;left:0;width:100%;
+    background:linear-gradient(var(--amber),var(--magenta));
+    border-radius:2px;
+    height:0%;
+    transition:height .25s ease-out;
+  }
+  .spine ul{
+    list-style:none;
+    margin:0;padding:0;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+  .spine li{position:relative;}
+  .spine a{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    text-decoration:none;
+    color:var(--text-muted);
+    font-size:.82rem;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .spine .dot{
+    width:9px;height:9px;
+    border-radius:50%;
+    background:var(--surface-3);
+    border:1px solid var(--border);
+    flex:none;
+    transition:background .2s, box-shadow .2s, transform .2s;
+  }
+  .spine a.active .dot{
+    background:var(--amber);
+    box-shadow:0 0 0 4px color-mix(in srgb, var(--amber) 25%, transparent);
+    transform:scale(1.15);
+  }
+  .spine a.active{color:var(--text);}
+  .spine .label{opacity:.9;}
+  @media (max-width:1080px){
+    .spine .label{display:none;}
+    .spine{left:14px;}
+  }
+  @media (max-width:760px){
+    .spine{display:none;}
+    main{padding:0 20px;}
+    .topbar-progress{
+      position:fixed;top:0;left:0;height:3px;width:100%;
+      background:var(--spine-track);z-index:50;
+    }
+    .topbar-progress i{
+      display:block;height:100%;width:0%;
+      background:linear-gradient(90deg,var(--amber),var(--magenta));
+    }
+  }
+  .topbar-progress{display:none;}
+  @media (max-width:760px){.topbar-progress{display:block;}}
+
+  a:focus-visible, button:focus-visible{
+    outline:2px solid var(--amber);
+    outline-offset:3px;
+  }
+
+  /* ---------- hero ---------- */
+  .hero{
+    padding-top:clamp(48px,10vh,110px);
+    padding-bottom:64px;
+    display:grid;
+    grid-template-columns:1.1fr .9fr;
+    gap:48px;
+    align-items:center;
+    border-top:none;
+  }
+  @media (max-width:860px){
+    .hero{grid-template-columns:1fr;}
+  }
+  .hero-title{
+    font-size:clamp(3rem,8vw,5.4rem);
+    margin:.2rem 0 .8rem;
+    background:linear-gradient(100deg,var(--text) 40%, var(--magenta) 78%, var(--amber));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  .hero-tag{
+    font-size:1.18rem;
+    font-weight:700;
+    margin:0 0 .9rem;
+  }
+  .hero-desc{
+    color:var(--text-muted);
+    max-width:52ch;
+    font-size:1.02rem;
+    margin:0 0 1.8rem;
+  }
+  .hero-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-bottom:1.8rem;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:.8rem 1.3rem;
+    border-radius:999px;
+    font-weight:700;
+    font-size:.94rem;
+    text-decoration:none;
+    border:1px solid transparent;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover{transform:translateY(-1px);}
+  .btn-primary{
+    background:linear-gradient(100deg,var(--amber),var(--magenta));
+    color:#1a1017;
+  }
+  .btn-primary:hover{box-shadow:0 10px 24px -8px color-mix(in srgb, var(--magenta) 60%, transparent);}
+  .btn-ghost{
+    background:transparent;
+    border-color:var(--border);
+    color:var(--text);
+  }
+  .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{
+    font-size:.78rem;
+    font-weight:700;
+    padding:.34rem .7rem;
+    border-radius:999px;
+    background:var(--surface-2);
+    color:var(--text-muted);
+    border:1px solid var(--border);
+  }
+  .speaker-line{
+    margin-top:1.4rem;
+    font-size:.85rem;
+    color:var(--text-muted);
+  }
+  .hero-visual{
+    position:relative;
+    aspect-ratio:1/1.05;
+    border-radius:28px;
+    background:radial-gradient(120% 120% at 20% 15%, var(--surface-2), var(--surface));
+    border:1px solid var(--border);
+    overflow:hidden;
+  }
+  #treeCanvas{width:100%;height:100%;display:block;}
+  .hero-visual-caption{
+    position:absolute;left:16px;bottom:14px;right:16px;
+    font-size:.74rem;
+    color:var(--text-muted);
+    font-weight:700;
+    letter-spacing:.02em;
+  }
+
+  /* ---------- grids & cards ---------- */
+  .grid{display:grid;gap:20px;}
+  .grid-3{grid-template-columns:repeat(3,1fr);}
+  .grid-2{grid-template-columns:repeat(2,1fr);}
+  .grid-4{grid-template-columns:repeat(4,1fr);}
+  @media (max-width:880px){
+    .grid-3,.grid-4{grid-template-columns:repeat(2,1fr);}
+  }
+  @media (max-width:600px){
+    .grid-3,.grid-4,.grid-2{grid-template-columns:1fr;}
+  }
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:1.5rem;
+    box-shadow:0 1px 2px var(--shadow);
+  }
+  .card h3{
+    font-size:1.12rem;
+    margin:.3rem 0 .6rem;
+  }
+  .card p{
+    color:var(--text-muted);
+    font-size:.92rem;
+    margin:0;
+  }
+  .kicker-num{
+    font-family:'Do Hyeon',sans-serif;
+    font-size:1.6rem;
+    color:var(--amber);
+    display:block;
+  }
+
+  /* problem cards */
+  .problem-card{border-top:3px solid var(--magenta);}
+  .problem-card .fact{
+    margin-top:.9rem;
+    padding-top:.9rem;
+    border-top:1px dashed var(--border);
+    font-size:.85rem;
+    color:var(--text);
+    font-weight:500;
+  }
+
+  /* flow steps */
+  .flow-list{
+    list-style:none;margin:0;padding:0;
+    display:grid;gap:16px;
+  }
+  .flow-list li{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:16px;
+    align-items:flex-start;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:1.1rem 1.3rem;
+  }
+  .flow-num{
+    font-family:'Do Hyeon',sans-serif;
+    font-size:1.5rem;
+    color:var(--surface);
+    background:linear-gradient(140deg,var(--amber),var(--magenta));
+    width:2.3rem;height:2.3rem;
+    border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    flex:none;
+  }
+  .flow-list h4{margin:.1rem 0 .3rem;font-size:1.02rem;}
+  .flow-list p{margin:0;color:var(--text-muted);font-size:.92rem;}
+
+  /* target customer split */
+  .persona{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:1.8rem;
+  }
+  .persona h3{margin-top:0;}
+  .persona dl{margin:1rem 0 0;display:grid;gap:.9rem;}
+  .persona dt{
+    font-size:.72rem;
+    font-weight:700;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--magenta);
+    margin-bottom:.25rem;
+  }
+  .persona dd{margin:0;color:var(--text-muted);font-size:.92rem;}
+  .persona .why-list{margin:.3rem 0 0;padding-left:1.1rem;color:var(--text);font-size:.9rem;}
+  .persona .why-list li{margin-bottom:.35rem;}
+
+  /* retention timeline */
+  .timeline{list-style:none;margin:0;padding:0;position:relative;}
+  .timeline::before{
+    content:"";position:absolute;left:14px;top:6px;bottom:6px;width:2px;
+    background:var(--spine-track);
+  }
+  .timeline li{
+    position:relative;
+    padding-left:46px;
+    margin-bottom:2rem;
+  }
+  .timeline li:last-child{margin-bottom:0;}
+  .timeline li::before{
+    content:"";position:absolute;left:6px;top:4px;width:18px;height:18px;
+    border-radius:50%;
+    background:var(--bg);
+    border:3px solid var(--amber);
+  }
+  .timeline .t-label{
+    font-size:.76rem;font-weight:700;letter-spacing:.06em;
+    color:var(--amber);text-transform:uppercase;
+    margin-bottom:.3rem;
+  }
+  .timeline h4{margin:.1rem 0 .4rem;font-size:1.05rem;}
+  .timeline p{margin:0;color:var(--text-muted);font-size:.92rem;max-width:60ch;}
+  .timeline blockquote{
+    margin:.6rem 0 0;
+    padding:.6rem .9rem;
+    background:var(--surface-2);
+    border-left:3px solid var(--magenta);
+    border-radius:0 10px 10px 0;
+    font-size:.86rem;
+    font-style:normal;
+    color:var(--text);
+  }
+
+  /* pricing */
+  .price-card{display:flex;flex-direction:column;gap:.6rem;}
+  .price-card .amt{
+    font-family:'Do Hyeon',sans-serif;
+    font-size:2rem;
+    color:var(--text);
+  }
+  .price-card .amt small{font-size:.9rem;color:var(--text-muted);font-family:'Gothic A1',sans-serif;font-weight:700;}
+  .price-card ul{margin:0;padding-left:1.1rem;color:var(--text-muted);font-size:.86rem;}
+  .price-tag{
+    align-self:flex-start;
+    font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:.25rem .6rem;border-radius:999px;
+    background:var(--surface-2);color:var(--magenta);
+  }
+
+  /* stat tiles */
+  .stat-tile{text-align:left;}
+  .stat-tile .num{
+    font-family:'Do Hyeon',sans-serif;
+    font-size:2.6rem;
+    line-height:1;
+    color:var(--green);
+    display:block;
+    margin-bottom:.4rem;
+    font-variant-numeric:tabular-nums;
+  }
+  .stat-tile .cost{
+    margin-top:.8rem;
+    font-size:.8rem;
+    color:var(--text-muted);
+    border-top:1px dashed var(--border);
+    padding-top:.6rem;
+  }
+
+  /* market funnel */
+  .funnel{display:grid;gap:16px;}
+  .funnel-row{
+    display:grid;
+    grid-template-columns:120px 1fr auto;
+    gap:20px;
+    align-items:center;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:1.3rem 1.5rem;
+  }
+  @media (max-width:640px){
+    .funnel-row{grid-template-columns:1fr;text-align:left;}
+  }
+  .funnel-row .tag{
+    font-family:'Do Hyeon',sans-serif;
+    font-size:1.3rem;
+  }
+  .funnel-row .formula{color:var(--text-muted);font-size:.86rem;}
+  .funnel-row .value{
+    font-family:'Do Hyeon',sans-serif;
+    font-size:1.9rem;
+    color:var(--amber);
+    white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .funnel-row.som{border-left:4px solid var(--green);}
+  .funnel-row.sam{border-left:4px solid var(--amber);}
+  .funnel-row.tam{border-left:4px solid var(--magenta);}
+
+  /* competition table */
+  .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:16px;}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:.9rem;}
+  th,td{text-align:left;padding:.9rem 1.1rem;border-bottom:1px solid var(--border);vertical-align:top;}
+  thead th{
+    background:var(--surface-2);
+    font-family:'Do Hyeon',sans-serif;
+    font-weight:400;
+    font-size:1rem;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  td.us{color:var(--green);font-weight:700;}
+
+  /* gtm */
+  .gtm-card{position:relative;padding-top:2rem;}
+  .gtm-phase{
+    position:absolute;top:1.3rem;right:1.5rem;
+    font-family:'Do Hyeon',sans-serif;
+    font-size:.85rem;
+    color:var(--text-muted);
+  }
+
+  /* closing */
+  .closing{
+    text-align:left;
+    padding-bottom:120px;
+  }
+  .closing blockquote{
+    font-family:'Song Myung',serif;
+    font-size:clamp(1.3rem,3vw,1.8rem);
+    line-height:1.5;
+    margin:0 0 2rem;
+    max-width:44ch;
+    color:var(--text);
+  }
+  .closing blockquote em{color:var(--magenta);font-style:normal;}
+  .closing-foot{
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:1rem;
+    align-items:center;
+    border-top:1px solid var(--border);
+    padding-top:1.6rem;
+    color:var(--text-muted);
+    font-size:.84rem;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    *{animation-duration:.001ms !important; transition-duration:.001ms !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar-progress"><i id="topProgress"></i></div>
+
+<nav class="spine" aria-label="섹션 이동">
+  <div class="spine-track"><div class="spine-progress" id="spineProgress"></div></div>
+  <ul id="spineList">
+    <li><a href="#hero" data-target="hero"><span class="dot"></span><span class="label">시작</span></a></li>
+    <li><a href="#problem" data-target="problem"><span class="dot"></span><span class="label">문제</span></a></li>
+    <li><a href="#solution" data-target="solution"><span class="dot"></span><span class="label">해법</span></a></li>
+    <li><a href="#features" data-target="features"><span class="dot"></span><span class="label">기능</span></a></li>
+    <li><a href="#target" data-target="target"><span class="dot"></span><span class="label">고객</span></a></li>
+    <li><a href="#retention" data-target="retention"><span class="dot"></span><span class="label">리텐션</span></a></li>
+    <li><a href="#business" data-target="business"><span class="dot"></span><span class="label">비즈니스</span></a></li>
+    <li><a href="#market" data-target="market"><span class="dot"></span><span class="label">시장</span></a></li>
+    <li><a href="#competition" data-target="competition"><span class="dot"></span><span class="label">경쟁</span></a></li>
+    <li><a href="#gtm" data-target="gtm"><span class="dot"></span><span class="label">실행</span></a></li>
+    <li><a href="#closing" data-target="closing"><span class="dot"></span><span class="label">마무리</span></a></li>
+  </ul>
+</nav>
+
+<main>
+
+  <section id="hero" class="section hero">
+    <div>
+      <p class="eyebrow">Google I/O Extended · Hack the Beat</p>
+      <h1 class="hero-title">BeatTree</h1>
+      <p class="hero-tag">하나의 음악에서 시작해, 취향대로 가지가 갈라지는 무소음 파티</p>
+      <p class="hero-desc">각자의 스마트폰과 이어폰으로 음악을 들으며, 취향에 따라 실시간으로 음악 가지(Branch)를 만들고 함께 이동하는 웹(PWA) 기반 무소음 파티 솔루션입니다. 앱 설치도, 회원가입도 없습니다.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://flux-institutes-easy-exterior.trycloudflare.com" target="_blank" rel="noopener">지금 데모 열어보기 ↗</a>
+        <a class="btn btn-ghost" href="#problem">왜 필요한가 ↓</a>
+      </div>
+      <div class="chip-row">
+        <span class="chip">React · Vite</span>
+        <span class="chip">Spring Boot · WebSocket/STOMP</span>
+        <span class="chip">YouTube IFrame API</span>
+        <span class="chip">WebRTC P2P</span>
+      </div>
+      <p class="speaker-line">발표자: OOO · BeatTree Team</p>
+    </div>
+    <div class="hero-visual">
+      <canvas id="treeCanvas"></canvas>
+      <p class="hero-visual-caption">사람이 몰린 가지일수록 굵고 밝게 빛납니다</p>
+    </div>
+  </section>
+
+  <section id="problem" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Problem</p>
+      <h2 class="section-title">오프라인 파티 현장의 문제는 구체적입니다</h2>
+      <p class="section-desc">밤이 깊을수록 파티는 셋 중 하나로 무너집니다 — 신고당하거나, 취향이 독점되거나, 다 같이 조용해지거나.</p>
+    </div>
+    <div class="grid grid-3">
+      <div class="card problem-card">
+        <h3>소음 규제와 민원</h3>
+        <p>자정이 넘으면 도심 파티룸·숙소는 층간소음 민원으로 경찰이 출동하거나 보증금이 몰수됩니다. 성수·홍대 팝업스토어는 소음진동관리법상 야간 50dB 규제로 밤 9시 이후 스피커 출력 자체가 불가능합니다.</p>
+        <p class="fact">파티룸 후기 다수: 심야 민원 → 퇴실 + 보증금 5만~10만 원 몰수</p>
+      </div>
+      <div class="card problem-card">
+        <h3>취향의 독점과 파편화</h3>
+        <p>블루투스 스피커 한 대에 의존하면 목소리 큰 사람의 취향이 방 전체를 지배합니다. Spotify Jam 같은 단일 재생목록 구조는 참가자 간 취향 충돌을 그대로 노출시킵니다.</p>
+        <p class="fact">한 명이 고르면 나머지 80%는 그냥 따라 듣습니다</p>
+      </div>
+      <div class="card problem-card">
+        <h3>소통의 단절</h3>
+        <p>소음을 피해 각자 이어폰을 끼는 순간, 옆 사람이 무슨 노래를 듣는지 알 길이 없어 대화가 끊깁니다. 결국 "같이 모여서 각자 폰만 보는" 적막이 찾아옵니다.</p>
+        <p class="fact">이어폰 = 조용한 파티의 대가로 잃는 것: 대화</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="solution" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Solution</p>
+      <h2 class="section-title">하나의 뿌리에서 자라나는 음악 나무</h2>
+      <p class="section-desc">메인 DJ 음악이 뿌리이자 중심 줄기입니다. 시간이 흐른 만큼 줄기가 자라고, 참가자가 새 음악을 신청하면 그 지점에서 가지가 갈라져 나옵니다. 사람이 몰릴수록 그 가지는 실시간으로 더 굵고 밝게 빛납니다.</p>
+    </div>
+    <ol class="flow-list">
+      <li>
+        <span class="flow-num">1</span>
+        <div>
+          <h4>입장 — 앱 설치·회원가입 없이 1초</h4>
+          <p>QR/링크 접속 → 닉네임·이모지 온보딩 → 파티룸 랭킹에서 입장. 초대 링크(<code>?room=id</code>)로 바로 입장도 가능합니다.</p>
+        </div>
+      </li>
+      <li>
+        <span class="flow-num">2</span>
+        <div>
+          <h4>듣기 — 늦게 들어와도 지금 흐르는 지점부터</h4>
+          <p>나무에서 브랜치를 탭하면 서버 시간 기준으로 동기화되어 재생됩니다. 이미 진행 중인 대화에 자연스럽게 합류하는 감각입니다.</p>
+        </div>
+      </li>
+      <li>
+        <span class="flow-num">3</span>
+        <div>
+          <h4>분기 — 내 취향의 가지를 직접 만들기</h4>
+          <p>"새 브랜치 만들기"에서 유튜브 링크를 입력하면 내 브랜치가 나무에서 갈라져 나오고, 사람이 들어올수록 실시간으로 굵어집니다.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section id="features" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Core Features</p>
+      <h2 class="section-title">핵심 기능</h2>
+      <p class="section-desc">이어폰 때문에 끊긴 소통을 되살리고, 나무가 무한정 흩어지지 않도록 실제 동작 규칙까지 설계했습니다.</p>
+    </div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>Zero-Barrier QR 1초 온보딩</h3>
+        <p>앱스토어 다운로드와 회원가입 절차를 배제하고, 현장 QR 스캔 시 PWA 웹 브라우저로 즉시 진입합니다. 닉네임·이모지 선택과 이어폰 좌우 테스트 후 바로 참여합니다.</p>
+      </div>
+      <div class="card">
+        <h3>Dynamic Auto-Branching</h3>
+        <p>참가자가 유튜브 링크를 입력하면 현재 듣던 가지 끝에서 새 가지가 자라납니다. 접속자 수가 많은 가지일수록 굵고 화려하게 발광합니다.</p>
+        <p class="fact" style="margin-top:.9rem;padding-top:.9rem;border-top:1px dashed var(--border);">파편화 방지: 동시 개설 가지 수는 전체 접속자의 10% 이내로 제한하고, 6분 30초(약 2곡)간 청취자가 0명인 가지는 자동 소멸·병합됩니다.</p>
+      </div>
+      <div class="card">
+        <h3>이어폰 착용 상태의 현장 소통 UX</h3>
+        <p><strong>콕 찌르기</strong> — 닉네임을 클릭하면 상대방 이어폰으로 노크 사운드와 알림이 전달됩니다.<br><strong>1:1 귓속말</strong> — '꾹 눌러 말하기'를 누르는 동안 WebRTC P2P 오디오가 열리고, 듣던 음악 볼륨이 자동으로 줄었다가(덕킹) 종료 후 복원됩니다.</p>
+      </div>
+      <div class="card">
+        <h3>파티형 확산 구조</h3>
+        <p>초대 QR·링크 생성과 가장 핫한 가지로의 원탭 이동이 제품 안에 내장돼 있습니다. 브랜치 굵기·랭킹·콕 찌르기는 전부 같은 공간의 타인이 있어야 의미가 생기는 구조라, 동반 참여가 선택이 아니라 전제입니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="target" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Target Customer</p>
+      <h2 class="section-title">타깃 고객의 구체성</h2>
+      <p class="section-desc">가짜 인터뷰 대신 소음 관련 법령과 실제 공간 대여 후기를 근거로 타깃과 페인 포인트를 특정했습니다.</p>
+    </div>
+    <div class="grid grid-2">
+      <div class="persona">
+        <span class="price-tag">B2C · Private</span>
+        <h3>소규모 공간 모임 주최자</h3>
+        <dl>
+          <div>
+            <dt>Who</dt>
+            <dd>파티룸·펜션·공유주방·집들이·대학 동아리 MT를 연 2~4회 기획하는 모임장·호스트</dd>
+          </div>
+          <div>
+            <dt>When &amp; Where</dt>
+            <dd>심야(22시~04시) 포함 언제든 — 도심 파티룸, 주거지역 인근 공유 공간, MT 숙소, 자취방</dd>
+          </div>
+          <div>
+            <dt>Why</dt>
+            <ul class="why-list">
+              <li>심야 스피커 사용 → 층간소음 민원으로 퇴실·보증금(5만~10만 원) 몰수 리스크</li>
+              <li>목소리 크거나 주도권 있는 사람의 취향으로 재생목록 고정 → 나머지 80% 소외</li>
+              <li>각자 이어폰을 꽂으면 서로 무슨 노래를 듣는지 몰라 교류 단절</li>
+            </ul>
+          </div>
+        </dl>
+      </div>
+      <div class="persona">
+        <span class="price-tag">B2B · Mass</span>
+        <h3>도심 팝업스토어 &amp; 축제 기획자</h3>
+        <dl>
+          <div>
+            <dt>Who</dt>
+            <dd>성수·홍대·강남 팝업스토어 브랜드 마케터, 대학 축제 기획단, 지자체 야간 행사 대행사 담당자</dd>
+          </div>
+          <div>
+            <dt>When &amp; Where</dt>
+            <dd>도심 팝업 야간 파티(19시~22시), 대학 교내 소음 제한 구역, 도심 루프탑</dd>
+          </div>
+          <div>
+            <dt>Why</dt>
+            <ul class="why-list">
+              <li>소음진동관리법상 야간 생활소음 규제 50dB 이하 — 밤 9시 이후 스피커 출력 불가 (이동식 방음벽체 공사 회당 300만~500만 원)</li>
+              <li>기존 사일런트 디스코는 전용 무선 헤드폰 수백 개를 대여·배포·수거·소독·충전해야 해 전담 인력 2~3명 필요</li>
+            </ul>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section id="retention" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Retention</p>
+      <h2 class="section-title">파티가 끝나도 제품이 다시 부릅니다</h2>
+      <p class="section-desc">막연한 푸시 알림이 아니라, 정확한 시점에 걸리는 세 개의 트리거로 설계했습니다.</p>
+    </div>
+    <ol class="timeline">
+      <li>
+        <p class="t-label">파티 종료 직후</p>
+        <h4>디지털 타임라인 방명록 저장</h4>
+        <p>파티 동안 자라난 음악 나무가 정적 미디어 아트 + 인터랙티브 타임라인으로 변환되어 'Party Archive'에 자동 보존됩니다. 내가 만든 가지, 콕 찌르기 기록을 다시 확인할 수 있습니다.</p>
+      </li>
+      <li>
+        <p class="t-label">파티 종료 24시간 후</p>
+        <h4>5초 미리듣기 카탈로그 알림</h4>
+        <p>카카오톡 알림톡·웹 푸시로 5초 오디오 미리듣기 카드가 발송됩니다.</p>
+        <blockquote>"지난밤 [OO 파티룸]에서 가장 핫했던 Top 3 음악 가지를 확인하세요!"</blockquote>
+      </li>
+      <li>
+        <p class="t-label">주말 3일 전 · 목요일 18:00</p>
+        <h4>호스트 전환 Free Pass 지급</h4>
+        <p>기존 참가자에게 무료 Party Pass 1회권이 발급되어, 게스트를 다음 파티의 방장(Host)으로 전환시킵니다.</p>
+        <blockquote>"다음 파티의 방장이 되어보세요! 무료 Party Pass 1회권 도착"</blockquote>
+      </li>
+    </ol>
+  </section>
+
+  <section id="business" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Business Model</p>
+      <h2 class="section-title">수익 구조와 단위 경제성</h2>
+      <p class="section-desc">게스트는 영구 무료로 확산 엔진 역할을 하고, 수익은 모임장·기획사·하드웨어 대여에서 발생합니다.</p>
+    </div>
+    <div class="grid grid-4" style="margin-bottom:24px;">
+      <div class="card price-card">
+        <span class="price-tag">B2C</span>
+        <h3 style="margin-bottom:0;">Party Pass</h3>
+        <p class="amt">3,900<small>원 / 건</small></p>
+        <ul>
+          <li>방 시간 무제한</li>
+          <li>공개 로비 노출</li>
+          <li>가변 브랜치 6개 개설</li>
+          <li>커스텀 권한</li>
+        </ul>
+      </div>
+      <div class="card price-card">
+        <span class="price-tag">B2C</span>
+        <h3 style="margin-bottom:0;">이모티콘 · 폭죽</h3>
+        <p class="amt">990<small>원 / 회</small></p>
+        <ul>
+          <li>메인 스크린 닉네임 시각 팝업</li>
+          <li>인앱 결제</li>
+        </ul>
+      </div>
+      <div class="card price-card">
+        <span class="price-tag">B2B</span>
+        <h3 style="margin-bottom:0;">Mass Package</h3>
+        <p class="amt">50~150<small>만 원</small></p>
+        <ul>
+          <li>100명 50만 원 / 300명 150만 원</li>
+          <li>계약금 50% + 당일 잔금 50%</li>
+        </ul>
+      </div>
+      <div class="card price-card">
+        <span class="price-tag">B2B</span>
+        <h3 style="margin-bottom:0;">Hardware Rental</h3>
+        <p class="amt">3,000<small>원~</small></p>
+        <ul>
+          <li>RGB LED 팔찌 개당 3,000원</li>
+          <li>무소음 헤드폰 개당 5,000원</li>
+        </ul>
+      </div>
+    </div>
+    <div class="grid grid-3">
+      <div class="card stat-tile">
+        <span class="num">94.8%</span>
+        <h3 style="margin:0;">B2C 순마진율</h3>
+        <p>매출 3,900원 대비 변동비 약 200원. 100% 자동화, 운영 인력 0명.</p>
+        <p class="cost">PG 수수료 100원 + API·트래픽 100원</p>
+      </div>
+      <div class="card stat-tile">
+        <span class="num">80.9%</span>
+        <h3 style="margin:0;">B2B 100명 세트</h3>
+        <p>매출 110만 원 대비 변동비 21만 원. Self-Setup 키트 배송 시 인력 0명.</p>
+        <p class="cost">서버 1만 + 배송 5만 + 감가 5만 + 현장 인력 10만</p>
+      </div>
+      <div class="card stat-tile">
+        <span class="num">84.3%</span>
+        <h3 style="margin:0;">B2B 300명 세트</h3>
+        <p>매출 350만 원 대비 변동비 55만 원.</p>
+        <p class="cost">서버 3만 + 배송 10만 + 감가 12만 + 지원 인력 2명 30만</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="market" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Market Size</p>
+      <h2 class="section-title">상향식으로 쌓은 시장 규모</h2>
+      <p class="section-desc">공식은 하나입니다 — 도달 대상 수 × 유료 전환율 × 연간 이용 빈도 × 단가.</p>
+    </div>
+    <div class="funnel">
+      <div class="funnel-row som">
+        <span class="tag">SOM</span>
+        <span class="formula">수도권 파티룸 소모임 5,000개 × 전환율 4%(200개) × 연 3회 × 5,000원 = 300만 원<br>+ 성수·홍대·강남 팝업 100곳 × 계약율 13%(13곳) × 연 4회 × 150만 원 = 7,800만 원</span>
+        <span class="value">8,100만 원</span>
+      </div>
+      <div class="funnel-row sam">
+        <span class="tag">SAM</span>
+        <span class="formula">B2C 1,200개 그룹(1,800만 원) + B2B 60곳(4.5억 원) — 전국 주요 도시 확장, 3~4년 차</span>
+        <span class="value">4.68억 원</span>
+      </div>
+      <div class="funnel-row tam">
+        <span class="tag">TAM</span>
+        <span class="formula">B2C 5,000개 그룹(7,500만 원) + B2B 230곳(20.7억 원) — 국내 전체 잠재 시장, 5년 차</span>
+        <span class="value">21.45억 원</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="competition" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Competition</p>
+      <h2 class="section-title">대체재는 있지만, 같은 문제를 풀지 않습니다</h2>
+      <p class="section-desc">약점도 인정합니다. 대형 플랫폼이 멀티룸 기능을 얹는 것 자체는 기술적으로 어렵지 않습니다 — 방어선은 오프라인 현장 데이터와 계정 제로 진입입니다.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>비교 대상</th><th>한계</th><th>BeatTree</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Spotify Jam / Apple SharePlay</td>
+            <td>전원 유료 구독 강제, 단일 재생목록에 모두가 수렴</td>
+            <td class="us">웹 1초 진입 + 여러 브랜치 동시 존재</td>
+          </tr>
+          <tr>
+            <td>카카오톡 · DM 신청</td>
+            <td>텍스트 위주 신청, 감성·시각적 재미 부재</td>
+            <td class="us">5초 미리듣기 + 나무 굵기 실시간 시각화</td>
+          </tr>
+          <tr>
+            <td>기존 Silent Disco</td>
+            <td>전용 수신기 배포 물류, 일방향 DJ 방송</td>
+            <td class="us">PWA 웹 접속 + WebRTC 귓속말 + RGB LED 패키지</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="gtm" class="section">
+    <div class="section-head">
+      <p class="eyebrow">Go To Market</p>
+      <h2 class="section-title">첫 100명, 구체적인 고유명사로</h2>
+      <p class="section-desc">추상적인 "바이럴 확보" 대신, 실제로 접근 가능한 커뮤니티와 공간을 이름으로 특정했습니다.</p>
+    </div>
+    <div class="grid grid-2">
+      <div class="card gtm-card">
+        <span class="gtm-phase">1~2개월 차</span>
+        <span class="price-tag">B2C</span>
+        <h3>파티룸 호스트 커뮤니티 직접 공략</h3>
+        <p>영업 담당 팀원 1명이 회원 수 1.8만 명의 네이버 카페 '파티룸 호스트 모임(파호모)'과 수도권 대학 동아리 15곳에 '소음 방지 QR 포스터 키트'와 Free Party Pass 쿠폰을 배포합니다. 목표는 첫 100개 모임장 유저 확보입니다.</p>
+      </div>
+      <div class="card gtm-card">
+        <span class="gtm-phase">2~3개월 차</span>
+        <span class="price-tag">B2B</span>
+        <h3>성수동 팝업 골목 콜드 비짓</h3>
+        <p>대표와 영업 담당자 2명이 성수동 연무장길 인근 소형 팝업 공간 30곳을 직접 방문합니다. "야간 8시 이후 소음 없이 진행하는 팝업 파티" 리플렛을 들고 첫 B2B 레퍼런스를 수주합니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="closing" class="section closing">
+    <p class="eyebrow">Closing</p>
+    <blockquote>
+      하나의 음악에서 시작해 취향대로 가지가 갈라지고,<br>
+      사람이 몰릴수록 굵어지며,<br>
+      이어폰 때문에 단절된 소통은 <em>콕과 귓속말</em>로 되살아납니다.
+    </blockquote>
+    <div class="hero-actions" style="margin-bottom:2rem;">
+      <a class="btn btn-primary" href="https://flux-institutes-easy-exterior.trycloudflare.com" target="_blank" rel="noopener">데모 다시 보기 ↗</a>
+    </div>
+    <div class="closing-foot">
+      <span>BeatTree — 자라나는 무소음 파티 나무</span>
+      <span>React · Spring Boot · WebSocket/STOMP · YouTube IFrame API · WebRTC</span>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function(){
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- scroll spine progress + active section ---- */
+  var links = Array.prototype.slice.call(document.querySelectorAll('.spine a'));
+  var sections = links.map(function(a){ return document.getElementById(a.dataset.target); });
+  var spineProgress = document.getElementById('spineProgress');
+  var topProgress = document.getElementById('topProgress');
+
+  function onScroll(){
+    var doc = document.documentElement;
+    var scrollTop = window.scrollY;
+    var max = doc.scrollHeight - window.innerHeight;
+    var pct = max > 0 ? Math.min(100, Math.max(0, (scrollTop / max) * 100)) : 0;
+    if (spineProgress) spineProgress.style.height = pct + '%';
+    if (topProgress) topProgress.style.width = pct + '%';
+
+    var current = sections[0];
+    var probe = scrollTop + window.innerHeight * 0.3;
+    for (var i = 0; i < sections.length; i++){
+      if (sections[i] && sections[i].offsetTop <= probe) current = sections[i];
+    }
+    links.forEach(function(a){
+      a.classList.toggle('active', current && a.dataset.target === current.id);
+    });
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  /* ---- hero canvas: growing music tree ---- */
+  var canvas = document.getElementById('treeCanvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  function amberColor(){
+    return getComputedStyle(document.documentElement).getPropertyValue('--amber').trim() || '#F5B942';
+  }
+  function magentaColor(){
+    return getComputedStyle(document.documentElement).getPropertyValue('--magenta').trim() || '#FF5FA8';
+  }
+
+  var branches = [];
+  function buildTree(w, h){
+    branches = [];
+    var startX = w * 0.12;
+    var startY = h * 0.82;
+    var seedRandom = (function(seed){
+      return function(){
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      };
+    })(42);
+
+    function grow(x, y, angle, len, depth, weight){
+      if (depth > 6 || len < 10) return;
+      var x2 = x + Math.cos(angle) * len;
+      var y2 = y + Math.sin(angle) * len;
+      branches.push({ x1:x, y1:y, x2:x2, y2:y2, weight:weight, depth:depth, delay: branches.length * 26 });
+
+      var children = depth < 2 ? 2 : (seedRandom() > 0.35 ? 2 : 1);
+      for (var i = 0; i < children; i++){
+        var spread = (i === 0 ? -1 : 1) * (0.28 + seedRandom() * 0.35);
+        var nextAngle = angle + spread * (depth < 2 ? 0.6 : 1);
+        var nextLen = len * (0.68 + seedRandom() * 0.12);
+        grow(x2, y2, nextAngle, nextLen, depth + 1, Math.max(1, weight * 0.72));
+      }
+    }
+    grow(startX, startY, -0.08, w * 0.30, 0, 7);
+  }
+
+  function resize(){
+    var rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    buildTree(rect.width, rect.height);
+  }
+
+  var startTime = null;
+  var growDuration = 2600;
+
+  function draw(t){
+    if (startTime === null) startTime = t;
+    var elapsed = t - startTime;
+    var rect = canvas.getBoundingClientRect();
+    ctx.clearRect(0,0,rect.width,rect.height);
+
+    var amber = amberColor();
+    var magenta = magentaColor();
+
+    branches.forEach(function(b){
+      var local = reduceMotion ? 1 : Math.min(1, Math.max(0, (elapsed - b.delay) / growDuration));
+      if (local <= 0) return;
+      var ex = b.x1 + (b.x2 - b.x1) * local;
+      var ey = b.y1 + (b.y2 - b.y1) * local;
+
+      var grad = ctx.createLinearGradient(b.x1,b.y1,ex,ey);
+      grad.addColorStop(0, amber);
+      grad.addColorStop(1, magenta);
+
+      ctx.beginPath();
+      ctx.moveTo(b.x1,b.y1);
+      ctx.lineTo(ex,ey);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = b.weight;
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.92;
+      ctx.stroke();
+
+      if (local >= 1 && b.depth >= 3){
+        ctx.beginPath();
+        ctx.arc(ex, ey, Math.max(1.5, b.weight * 0.9), 0, Math.PI*2);
+        ctx.fillStyle = magenta;
+        ctx.globalAlpha = 0.55;
+        ctx.fill();
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    if (!reduceMotion && elapsed < growDuration + branches.length * 26 + 400){
+      requestAnimationFrame(draw);
+    }
+  }
+
+  resize();
+  window.addEventListener('resize', function(){
+    startTime = null;
+    resize();
+    requestAnimationFrame(draw);
+  });
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
