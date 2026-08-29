@@ -3,6 +3,7 @@ package com.hackthebeat.app.party;
 import jakarta.annotation.PostConstruct;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -40,7 +41,7 @@ public class ChannelController {
         rooms.put(roomId, room);
         String color = PALETTE[colorIdx.getAndIncrement() % PALETTE.length];
         Channel main = new Channel("main-" + roomId, roomId, "DJ MAIN",
-                videoId == null || videoId.isBlank() ? DEFAULT_VIDEO : videoId, color, true);
+                videoId == null || videoId.isBlank() ? DEFAULT_VIDEO : videoId, color, true, null, 0);
         main.setOwnerKey(UUID.randomUUID().toString());
         channels.put(main.id, main);
         return Map.of("id", room.id(), "name", room.name(),
@@ -88,9 +89,20 @@ public class ChannelController {
 
     @PostMapping("/rooms/{roomId}/channels")
     public Map<String, Object> create(@PathVariable String roomId, @RequestBody Map<String, String> body) {
+        if (!rooms.containsKey(roomId)) throw new IllegalArgumentException("존재하지 않는 파티룸입니다.");
+        String parentId = body.get("parentChannelId");
+        Channel requestedParent = parentId == null ? null : channels.get(parentId);
+        if (requestedParent == null || !requestedParent.roomId.equals(roomId)) {
+            requestedParent = channels.values().stream()
+                    .filter(c -> c.roomId.equals(roomId) && c.isMain)
+                    .findFirst().orElseThrow();
+            parentId = requestedParent.id;
+        }
+        double parentElapsed = Math.max(0,
+                (System.currentTimeMillis() - requestedParent.createdAt) / 1000.0);
         String color = PALETTE[colorIdx.getAndIncrement() % PALETTE.length];
         Channel ch = new Channel(UUID.randomUUID().toString().substring(0, 8), roomId,
-                body.get("name"), body.get("youtubeVideoId"), color, false);
+                body.get("name"), body.get("youtubeVideoId"), color, false, parentId, parentElapsed);
         ch.setOwnerKey(UUID.randomUUID().toString());
         channels.put(ch.id, ch);
         broadcast();
@@ -112,7 +124,7 @@ public class ChannelController {
     @PostMapping("/channels/{id}/next")
     public Channel next(@PathVariable String id, @RequestBody Map<String, String> body) {
         Channel ch = channels.get(id);
-        if (ch != null) {
+        if (ch != null && ch.ownerKey() != null && ch.ownerKey().equals(body.get("ownerKey"))) {
             synchronized (ch) {
                 if (ch.youtubeVideoId.equals(body.get("fromVideoId"))) {
                     if (!ch.queue.isEmpty()) ch.youtubeVideoId = ch.queue.remove(0);
@@ -153,8 +165,21 @@ public class ChannelController {
         return Map.of("status", "ok");
     }
 
+    @PostMapping("/signal")
+    public Map<String, String> signal(@RequestBody Map<String, Object> body) {
+        Object target = body.get("toClientId");
+        if (target != null) messaging.convertAndSend("/topic/signal/" + target, body);
+        return Map.of("status", "ok");
+    }
+
     private void broadcast() {
         messaging.convertAndSend("/topic/channels", listChannels());
         messaging.convertAndSend("/topic/rooms", listRooms());
+    }
+
+    @Scheduled(fixedRate = 30000)
+    void removeDisconnectedRiders() {
+        long cutoff = System.currentTimeMillis() - 45000;
+        if (channels.values().stream().anyMatch(channel -> channel.removeStaleRiders(cutoff))) broadcast();
     }
 }

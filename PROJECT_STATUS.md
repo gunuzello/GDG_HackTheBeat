@@ -11,7 +11,7 @@
 
 ### 백엔드
 
-- Java 21 및 Spring Boot 3.5 기반 Maven 프로젝트 구성
+- Java 17 및 Spring Boot 3.5 기반 Maven 프로젝트 구성
 - 애플리케이션 진입점 생성
 - `GET /api/health` 상태 확인 API 구현
 - 일관된 JSON 오류 응답을 위한 전역 예외 처리 추가
@@ -24,6 +24,7 @@
 - 백엔드 상태를 화면에서 확인할 수 있는 기본 랜딩 페이지 구현
 - 개발 환경에서 `/api` 요청을 Spring Boot로 전달하는 Vite 프록시 구성
 - Docker 빌드 시 React 결과물을 Spring Boot 정적 파일로 포함하도록 구성
+- 특정 동승자에게 버튼을 누르는 동안만 음성을 보내는 WebRTC 1:1 귓속말과 음악 덕킹 구현
 
 ### 개발 환경 및 검증
 

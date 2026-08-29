@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 
 const HOST = window.location.hostname
-const API = import.meta.env.VITE_API_URL || `http://${HOST}:8081`
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${HOST}:8081/ws`
+const API = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? `http://${HOST}:8080` : '')
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss' : 'ws'
+const WS_URL = import.meta.env.VITE_WS_URL || (import.meta.env.DEV
+  ? `ws://${HOST}:8080/ws`
+  : `${WS_PROTOCOL}://${window.location.host}/ws`)
 
 let ytReady = null
 function loadYT() {
@@ -58,6 +61,24 @@ const EMOJIS = ['🎧', '🔥', '🪩', '⚡', '💃', '🕺', '🌙', '🍸', '
 function Onboarding({ onDone }) {
   const [nickname, setNickname] = useState('')
   const [emoji, setEmoji] = useState('🎧')
+  const [headphonesChecked, setHeadphonesChecked] = useState(false)
+  const testHeadphones = () => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const play = (pan, delay) => {
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const panner = ctx.createStereoPanner()
+      oscillator.frequency.value = pan < 0 ? 440 : 660
+      panner.pan.value = pan
+      gain.gain.value = 0.15
+      oscillator.connect(gain).connect(panner).connect(ctx.destination)
+      oscillator.start(ctx.currentTime + delay)
+      oscillator.stop(ctx.currentTime + delay + 0.35)
+    }
+    play(-1, 0)
+    play(1, 0.5)
+    setHeadphonesChecked(true)
+  }
   return (
     <div className="onboard">
       <h1 className="logo">BEATTREE</h1>
@@ -70,8 +91,12 @@ function Onboarding({ onDone }) {
             onClick={() => setEmoji(em)}>{em}</button>
         ))}
       </div>
+      <button className="headphone-test" onClick={testHeadphones}>
+        {headphonesChecked ? '✓ 이어폰 좌우 확인 완료' : '🎧 이어폰 좌우 테스트'}
+      </button>
       <button className="fab-static" onClick={() => {
         if (!nickname.trim()) { alert('닉네임을 입력해주세요'); return }
+        if (!headphonesChecked) { alert('이어폰 테스트를 먼저 해주세요'); return }
         const clientId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2))
         onDone({ clientId, nickname: nickname.trim(), emoji })
       }}>파티 입장 🎉</button>
@@ -86,6 +111,7 @@ function Main({ profile }) {
   const [joined, setJoined] = useState(null)
   const [offset, setOffset] = useState(0)
   const [poke, setPoke] = useState(null)
+  const [signal, setSignal] = useState(null)
   const [pendingRoom, setPendingRoom] = useState(
     () => new URLSearchParams(window.location.search).get('room'))
 
@@ -121,11 +147,24 @@ function Main({ profile }) {
           setPoke(data)
           setTimeout(() => setPoke(null), 3500)
         })
+        client.subscribe(`/topic/signal/${profile.clientId}`, msg => setSignal(JSON.parse(msg.body)))
       },
     })
     client.activate()
     return () => client.deactivate()
   }, [])
+
+  useEffect(() => {
+    if (!joined) return
+    const heartbeat = setInterval(() => {
+      fetch(`${API}/channels/${joined.id}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      })
+    }, 15000)
+    return () => clearInterval(heartbeat)
+  }, [joined?.id])
 
   const join = async (ch) => {
     await fetch(`${API}/channels/${ch.id}/join`, {
@@ -139,13 +178,13 @@ function Main({ profile }) {
     if (joined) fetch(`${API}/channels/${joined.id}/leave?clientId=${profile.clientId}`, { method: 'POST' })
     setJoined(null)
   }
-  const createBranch = async (name, url) => {
+  const createBranch = async (name, url, parentChannelId = null) => {
     const videoId = extractVideoId(url)
     if (!name || !videoId) { alert('브랜치 이름과 유튜브 링크를 확인해주세요'); return false }
     const res = await fetch(`${API}/rooms/${room.id}/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, youtubeVideoId: videoId }),
+      body: JSON.stringify({ name, youtubeVideoId: videoId, parentChannelId }),
     })
     const { channel, ownerKey } = await res.json()
     try { localStorage.setItem(`bt_owner_${channel.id}`, ownerKey) } catch {}
@@ -181,7 +220,8 @@ function Main({ profile }) {
   let view
   if (joined) {
     view = <PlayerView key={joined.id} channel={joined} offset={offset} channels={channels}
-      roomName={room?.name} profile={profile} onLeave={leave} onSwitch={switchTo} />
+      roomName={room?.name} profile={profile} onLeave={leave} onSwitch={switchTo}
+      onCreateBranch={createBranch} signal={signal} />
   } else if (room) {
     view = <BranchView room={room} channels={channels.filter(c => c.roomId === room.id)}
       offset={offset} onJoin={join} onBack={() => setRoom(null)} onCreate={createBranch} />
@@ -243,6 +283,8 @@ function RoomListView({ rooms, onEnter, onCreate }) {
 function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
   const [showForm, setShowForm] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
+  const [followLive, setFollowLive] = useState(true)
+  const canvasRef = useRef(null)
   const shareUrl = `${window.location.origin}?room=${room.id}`
   const copyLink = () => {
     navigator.clipboard?.writeText(shareUrl)
@@ -251,6 +293,16 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
   }
   const subs = channels.filter(c => !c.isMain)
   const total = channels.reduce((s, c) => s + c.listenerCount, 0)
+  const hottest = [...channels].sort((a, b) => b.listenerCount - a.listenerCount)[0]
+
+  useEffect(() => {
+    if (!followLive) return
+    const timer = setInterval(() => {
+      const canvas = canvasRef.current
+      if (canvas) canvas.scrollLeft = canvas.scrollWidth - canvas.clientWidth
+    }, 120)
+    return () => clearInterval(timer)
+  }, [followLive])
 
   return (
     <div className="screen">
@@ -273,9 +325,19 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
           </div>
         </div>
       )}
-      <div className="canvas-wrap">
+      <div className="canvas-wrap" ref={canvasRef}
+        onPointerDown={() => setFollowLive(false)}
+        onWheel={() => setFollowLive(false)}>
         <TreeSvg channels={channels} offset={offset} onJoin={onJoin} />
       </div>
+      {!followLive && (
+        <button className="follow-live" onClick={() => setFollowLive(true)}>현재 머리로 →</button>
+      )}
+      {hottest && (
+        <button className="hot-jump" onClick={() => onJoin(hottest)}>
+          🔥 가장 핫한 가지로 점프 · {hottest.listenerCount}명
+        </button>
+      )}
       {showForm ? (
         <Form fields={[['브랜치 이름', true], ['유튜브 링크', true]]}
           submitLabel="브랜치 만들기"
@@ -290,111 +352,114 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
 // 브랜치 화면과 플레이어 화면에서 공용으로 쓰는 나무 시각화
 function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   const [, setTick] = useState(0)
-  // 나무가 "자라는" 것을 보여주기 위한 리렌더 타이머
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 2000)
+    const t = setInterval(() => setTick(x => x + 1), 120)
     return () => clearInterval(t)
   }, [])
 
   const main = channels.find(c => c.isMain)
   const subs = channels.filter(c => !c.isMain)
   const now = Date.now() + offset
-  const TY = 240
-  const trunkW = main ? Math.min(16 + main.listenerCount * 2, 34) : 16
+  if (!main) return null
 
-  // 자라남: 파티룸이 열린 뒤 흐른 시간만큼 트렁크가 오른쪽으로 자람 (곡이 바뀌어도 리셋 안 됨, 최대 10분)
-  const mainBirth = main ? (main.createdAt ?? main.startedAt) : 0
-  const mainElapsed = main ? Math.min((now - mainBirth) / 1000, 600) : 0
-  const trunkTip = 300 + mainElapsed * 1.8
+  const nodes = new Map()
+  const children = new Map()
+  const growthLength = (channel, elapsed) => channel.isMain
+    ? Math.max(180, elapsed * 5)
+    : Math.max(100, elapsed * 4)
+  subs.forEach(ch => children.set(ch.parentId, [...(children.get(ch.parentId) || []), ch]))
+  const mainElapsed = Math.max(0, (now - (main.createdAt ?? main.startedAt)) / 1000)
+  const mainLength = growthLength(main, mainElapsed)
+  nodes.set(main.id, { x1: 35, y1: 260, x2: 35 + mainLength, y2: 260,
+    angle: 0, depth: 0, length: mainLength, bendLength: 0 })
 
-  // 각 브랜치는 "생성된 시점의 트렁크 끝"에서 갈라져 나옴
-  const geo = subs.map((ch, i) => {
-    const side = i % 2 === 0 ? 1 : -1
-    const birth = ch.createdAt ?? ch.startedAt
-    const forkElapsed = Math.min(Math.max((birth - mainBirth) / 1000, 0), 600)
-    const branchX = 300 + forkElapsed * 1.8
-    // 브랜치도 생성된 뒤 흐른 시간만큼 자람
-    const bElapsed = Math.min((now - birth) / 1000, 300)
-    const bLen = 60 + bElapsed * 0.75
-    const endX = branchX + 55 + bLen * 0.4
-    const endY = TY + side * Math.min(65 + bLen * 0.5, 200)
-    return { ch, side, branchX, endX, endY }
-  })
-  const maxEndX = geo.reduce((m, g) => Math.max(m, g.endX), 0)
-  const W = Math.max(700, trunkTip + 150, maxEndX + 130)
+  const pointAt = (node, distance) => {
+    const d = Math.min(distance, node.length)
+    const bend = Math.min(d, node.bendLength)
+    return {
+      x: node.x1 + Math.cos(node.angle) * bend + Math.max(0, d - node.bendLength),
+      y: node.y1 + Math.sin(node.angle) * bend,
+    }
+  }
+
+  const layoutChildren = (parent) => {
+    const parentNode = nodes.get(parent.id)
+    const list = children.get(parent.id) || []
+    list.forEach((ch, index) => {
+      const splitDistance = Math.min(
+        growthLength(parent, ch.parentElapsedSecondsAtCreation),
+        Math.hypot(parentNode.x2 - parentNode.x1, parentNode.y2 - parentNode.y1),
+      )
+      const splitPoint = pointAt(parentNode, splitDistance)
+      const x1 = splitPoint.x
+      const y1 = splitPoint.y
+      const direction = index % 2 === 0 ? -1 : 1
+      const angle = parentNode.angle + direction * (0.48 + Math.floor(index / 2) * 0.16)
+      const elapsed = Math.max(0, (now - (ch.createdAt ?? ch.startedAt)) / 1000)
+      const length = growthLength(ch, elapsed)
+      const bendLength = Math.min(115, length)
+      const turnX = x1 + Math.cos(angle) * bendLength
+      const turnY = y1 + Math.sin(angle) * bendLength
+      nodes.set(ch.id, {
+        x1, y1,
+        x2: turnX + Math.max(0, length - bendLength),
+        y2: turnY,
+        angle,
+        depth: parentNode.depth + 1,
+        length,
+        bendLength,
+      })
+      layoutChildren(ch)
+    })
+  }
+  layoutChildren(main)
+  const allNodes = [...nodes.values()]
+  const W = Math.max(700, ...allNodes.map(n => n.x2 + 160))
+  const minY = Math.min(0, ...allNodes.map(n => n.y2 - 80))
+  const maxY = Math.max(520, ...allNodes.map(n => n.y2 + 80))
+  const H = maxY - minY
+
+  const renderChannel = (ch) => {
+    const node = nodes.get(ch.id)
+    const width = ch.isMain
+      ? Math.min(16 + ch.listenerCount * 2, 34)
+      : Math.min(4 + ch.listenerCount * 3, 22)
+    const turnX = node.x1 + Math.cos(node.angle) * node.bendLength
+    const turnY = node.y1 + Math.sin(node.angle) * node.bendLength
+    const controlX = (node.x1 + turnX) / 2
+    const controlY = node.y1 + (turnY - node.y1) * 0.72
+    const path = ch.isMain
+      ? `M ${node.x1} ${node.y1} L ${node.x2} ${node.y2}`
+      : `M ${node.x1} ${node.y1} Q ${controlX} ${controlY} ${turnX} ${turnY} L ${node.x2} ${node.y2}`
+    return (
+      <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
+        <path d={path}
+          fill="none" stroke={ch.colorHex} strokeWidth={width} strokeLinecap="round"
+          filter="url(#neonGlow)" className="flow-branch" style={{ transition: 'stroke-width 0.25s ease' }} />
+        <circle cx={node.x2} cy={node.y2} r={Math.max(9, width * 0.7)}
+          fill={ch.colorHex} filter="url(#neonGlow)" className="growing-tip" />
+        {currentId === ch.id && <circle cx={node.x2} cy={node.y2} r={Math.max(16, width)}
+          fill="none" stroke="#fff" strokeWidth="2" />}
+        <text x={node.x2} y={node.y2 - 24} textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700">
+          {ch.name} · {ch.listenerCount}명
+        </text>
+        {(ch.riders || []).slice(0, 5).map((r, j) => (
+          <text key={r.clientId} x={node.x2 - 20 - j * 22} y={node.y2 + 24} fontSize="14">{r.emoji}</text>
+        ))}
+      </g>
+    )
+  }
 
   return (
-    <svg viewBox={`0 0 ${W} 480`} width={W * scale} height={480 * scale}
+    <svg viewBox={`0 ${minY} ${W} ${H}`} width={W * scale} height={H * scale}
       style={{ display: 'block', minWidth: scale === 1 ? '100%' : undefined }}>
       <defs>
-        <filter id="neonGlow" filterUnits="userSpaceOnUse"
-          x="-100" y="-100" width={W + 200} height="680">
+        <filter id="neonGlow" filterUnits="userSpaceOnUse" x="-100" y={minY - 100} width={W + 200} height={H + 200}>
           <feGaussianBlur stdDeviation="4" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
-        {main && geo.map(({ ch, branchX, endX, endY }) => (
-          <linearGradient key={ch.id} id={`grad-${ch.id}`}
-            x1={branchX} y1={TY} x2={endX} y2={endY}
-            gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor={main.colorHex} />
-            <stop offset="100%" stopColor={ch.colorHex} />
-          </linearGradient>
-        ))}
       </defs>
-
-      {main && (
-        <g onClick={() => onJoin(main)} style={{ cursor: 'pointer' }}>
-          {/* 왼쪽 뿌리에서 오른쪽으로, 재생 시간만큼 자라는 트렁크 */}
-          <path
-            d={`M 20 ${TY} C ${trunkTip * 0.36} ${TY - 14}, ${trunkTip * 0.66} ${TY + 14}, ${trunkTip} ${TY}`}
-            fill="none" stroke={main.colorHex}
-            strokeWidth={trunkW} strokeLinecap="round"
-            filter="url(#neonGlow)" className="trunk-pulse"
-            style={{ transition: 'stroke-width 0.4s ease' }} />
-          <circle cx={trunkTip + 5} cy={TY} r={Math.max(12, trunkW * 0.8)}
-            fill={main.colorHex} filter="url(#neonGlow)"
-            style={{ transition: 'r 0.4s ease' }} />
-          {currentId === main.id && (
-            <circle cx={trunkTip + 5} cy={TY} r={Math.max(12, trunkW * 0.8) + 7}
-              fill="none" stroke="#fff" strokeWidth="2" opacity="0.85" />
-          )}
-          <text x={trunkTip + 5} y={TY - 40} textAnchor="middle" fill="#fff" fontSize="16" fontWeight="700">
-            {main.name} · {main.listenerCount}명
-          </text>
-          {(main.riders || []).slice(0, 5).map((r, j) => (
-            <text key={r.clientId} x={trunkTip - 30 - j * 24} y={TY - 16} fontSize="15">{r.emoji}</text>
-          ))}
-        </g>
-      )}
-
-      {geo.map(({ ch, side, branchX, endX, endY }) => {
-        const width = Math.min(3 + ch.listenerCount * 3, 22)
-        return (
-          <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
-            {/* 생성 시점의 트렁크 위치에서 갈라져 나옴 — 분기점 표시 점 */}
-            <circle cx={branchX} cy={TY} r="6" fill={main ? main.colorHex : '#fff'} />
-            <path
-              d={`M ${branchX} ${TY} C ${branchX + 8} ${TY + side * 55}, ${endX - 35} ${endY - side * 45}, ${endX} ${endY}`}
-              fill="none" stroke={`url(#grad-${ch.id})`}
-              strokeWidth={width} strokeLinecap="round"
-              filter="url(#neonGlow)"
-              style={{ transition: 'stroke-width 0.4s ease' }} />
-            <circle cx={endX} cy={endY} r="10" fill={ch.colorHex} filter="url(#neonGlow)" />
-            {currentId === ch.id && (
-              <circle cx={endX} cy={endY} r="17" fill="none" stroke="#fff" strokeWidth="2" opacity="0.85" />
-            )}
-            <text x={endX} y={endY + (side > 0 ? 32 : -24)} textAnchor="middle" fill="#fff" fontSize="13">
-              {ch.name} · {ch.listenerCount}명
-            </text>
-            {(ch.riders || []).slice(0, 4).map((r, j) => (
-              <text key={r.clientId} x={endX - 22 - j * 22} y={endY + (side > 0 ? -14 : 24)} fontSize="14">{r.emoji}</text>
-            ))}
-          </g>
-        )
-      })}
+      {[main, ...subs].map(renderChannel)}
     </svg>
   )
 }
@@ -418,23 +483,37 @@ function Form({ fields, submitLabel, onSubmit, onClose }) {
   )
 }
 
-function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch }) {
+function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch, onCreateBranch, signal }) {
   const playerRef = useRef(null)
+  const miniTreeRef = useRef(null)
   const loadedIdRef = useRef(channel.youtubeVideoId)
   const live = channels.find(c => c.id === channel.id) || channel
   const liveRef = useRef(live)
   liveRef.current = live
   const [showAdd, setShowAdd] = useState(false)
+  const [showBranch, setShowBranch] = useState(false)
+  const [speakingTo, setSpeakingTo] = useState(null)
+  const peerRef = useRef(null)
+  const streamRef = useRef(null)
+  const remoteAudioRef = useRef(null)
   let ownerKey = null
   try { ownerKey = localStorage.getItem(`bt_owner_${channel.id}`) } catch {}
   const isOwner = !!ownerKey
   const others = (live.riders || []).filter(r => r.clientId !== profile.clientId)
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const tree = miniTreeRef.current
+      if (tree) tree.scrollLeft = tree.scrollWidth - tree.clientWidth
+    }, 120)
+    return () => clearInterval(timer)
+  }, [])
+
   const requestNext = () => {
     fetch(`${API}/channels/${channel.id}/next`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromVideoId: liveRef.current.youtubeVideoId }),
+      body: JSON.stringify({ fromVideoId: liveRef.current.youtubeVideoId, ownerKey }),
     })
   }
   const addToQueue = async (url) => {
@@ -454,6 +533,70 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       body: JSON.stringify({ toClientId: r.clientId, fromNickname: profile.nickname, fromEmoji: profile.emoji }),
     })
   }
+  const sendSignal = (toClientId, payload) => fetch(`${API}/signal`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, toClientId, fromClientId: profile.clientId,
+      fromNickname: profile.nickname, fromEmoji: profile.emoji }),
+  })
+  const makePeer = (targetId) => {
+    const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+    peer.onicecandidate = e => e.candidate && sendSignal(targetId, { type: 'candidate', candidate: e.candidate })
+    peer.ontrack = e => {
+      remoteAudioRef.current.srcObject = e.streams[0]
+      remoteAudioRef.current.play().catch(() => {})
+    }
+    peerRef.current = peer
+    return peer
+  }
+  const startWhisper = async (r) => {
+    if (speakingTo) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      const peer = makePeer(r.clientId)
+      stream.getTracks().forEach(track => peer.addTrack(track, stream))
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+      await sendSignal(r.clientId, { type: 'offer', sdp: offer })
+      setSpeakingTo(r.clientId)
+      playerRef.current?.setVolume?.(35)
+    } catch { alert('마이크 권한이 필요합니다') }
+  }
+  const stopWhisper = (targetId = speakingTo) => {
+    if (targetId) sendSignal(targetId, { type: 'hangup' })
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    peerRef.current?.close()
+    streamRef.current = null
+    peerRef.current = null
+    setSpeakingTo(null)
+    playerRef.current?.setVolume?.(100)
+  }
+
+  useEffect(() => {
+    if (!signal) return
+    const handle = async () => {
+      if (signal.type === 'offer') {
+        peerRef.current?.close()
+        const peer = makePeer(signal.fromClientId)
+        await peer.setRemoteDescription(signal.sdp)
+        const answer = await peer.createAnswer()
+        await peer.setLocalDescription(answer)
+        await sendSignal(signal.fromClientId, { type: 'answer', sdp: answer })
+        playerRef.current?.setVolume?.(35)
+      } else if (signal.type === 'answer' && peerRef.current) {
+        await peerRef.current.setRemoteDescription(signal.sdp)
+      } else if (signal.type === 'candidate' && peerRef.current) {
+        await peerRef.current.addIceCandidate(signal.candidate).catch(() => {})
+      } else if (signal.type === 'hangup') {
+        peerRef.current?.close(); peerRef.current = null
+        remoteAudioRef.current.srcObject = null
+        playerRef.current?.setVolume?.(100)
+      }
+    }
+    handle().catch(console.error)
+  }, [signal])
+
+  useEffect(() => () => stopWhisper(), [])
 
   // 탭을 닫아도 퇴장 처리
   useEffect(() => {
@@ -463,8 +606,7 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
   }, [channel.id])
 
   useEffect(() => {
-    let interval, fade, settleTimer, destroyed = false
-    let settled = false
+    let interval, fade, destroyed = false
     loadYT().then(YT => {
       if (destroyed) return
       new YT.Player('yt-player', {
@@ -474,14 +616,13 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
           onReady: (e) => {
             const p = e.target
             playerRef.current = p
-            const sync = (threshold) => {
+            const sync = () => {
               let expected = (Date.now() + offset - liveRef.current.startedAt) / 1000
               const dur = p.getDuration()
               if (dur > 0) expected = expected % dur
-              if (Math.abs(p.getCurrentTime() - expected) > threshold) p.seekTo(expected, true)
+              if (Math.abs(p.getCurrentTime() - expected) > 0.75) p.seekTo(expected, true)
             }
-            // 1) 입장 시 1회 동기화
-            sync(0)
+            sync()
             // 페이드인 입장 (크로스페이드 라이트)
             try {
               p.setVolume(0)
@@ -493,25 +634,10 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
               }, 140)
             } catch {}
             p.playVideo()
-            // 3) 이후엔 건드리지 않되, 3초 이상 크게 어긋난 경우만 비상 복구
-            //    (탭 백그라운드 스로틀·긴 버퍼링 복구용 — 정상 재생 중엔 발동 안 함)
-            interval = setInterval(() => sync(3), 15000)
+            interval = setInterval(sync, 5000)
           },
           onStateChange: (e) => {
             if (e.data === 0) requestNext()
-            // 2) 실제 재생이 시작된 직후 1회 정밀 보정
-            //    (최초 seek는 버퍼링 전에 실행돼 버퍼링 시간만큼 밀리는 것을 여기서 잡음)
-            if (e.data === 1 && !settled) {
-              settled = true
-              settleTimer = setTimeout(() => {
-                const p = playerRef.current
-                if (!p) return
-                let expected = (Date.now() + offset - liveRef.current.startedAt) / 1000
-                const dur = p.getDuration()
-                if (dur > 0) expected = expected % dur
-                if (Math.abs(p.getCurrentTime() - expected) > 0.4) p.seekTo(expected, true)
-              }, 1200)
-            }
           },
         },
       })
@@ -520,7 +646,6 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       destroyed = true
       clearInterval(interval)
       clearInterval(fade)
-      clearTimeout(settleTimer)
       if (playerRef.current) playerRef.current.destroy()
     }
   }, [channel.id])
@@ -551,20 +676,29 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       </p>
       <div className="yt-box"><div id="yt-player" /></div>
       {/* 이 파티룸의 나무: 탭하면 그 브랜치로 바로 이동 */}
-      <div className="mini-tree">
+      <div className="mini-tree" ref={miniTreeRef}>
         <TreeSvg channels={channels.filter(c => c.roomId === channel.roomId)}
           offset={offset} onJoin={onSwitch} scale={0.55} currentId={channel.id} />
       </div>
       {others.length > 0 && (
         <div className="riders">
           {others.map(r => (
-            <button key={r.clientId} className="rider" onClick={() => pokeUser(r)}
-              title="콕 찌르기">
-              {r.emoji} {r.nickname} <span className="poke-hint">콕</span>
-            </button>
+            <div key={r.clientId} className="rider-wrap">
+              <button className="rider" onClick={() => pokeUser(r)} title="콕 찌르기">
+                {r.emoji} {r.nickname} <span className="poke-hint">콕</span>
+              </button>
+              <button className={`talk ${speakingTo === r.clientId ? 'active' : ''}`}
+                onPointerDown={() => startWhisper(r)}
+                onPointerUp={() => stopWhisper(r.clientId)}
+                onPointerCancel={() => stopWhisper(r.clientId)}
+                onPointerLeave={() => speakingTo === r.clientId && stopWhisper(r.clientId)}>
+                {speakingTo === r.clientId ? '말하는 중…' : '꾹 눌러 말하기'}
+              </button>
+            </div>
           ))}
         </div>
       )}
+      <audio ref={remoteAudioRef} autoPlay />
       {isOwner && (
         <div className="player-actions">
           <button onClick={() => setShowAdd(true)}>+ 곡 추가</button>
@@ -572,11 +706,17 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
             style={{ opacity: live.queue?.length ? 1 : 0.4 }}>다음 곡 ▶</button>
         </div>
       )}
+      <button className="branch-here" onClick={() => setShowBranch(true)}>⑂ 여기서 새 가지 만들기</button>
       {!isOwner && <p className="dj-note">이 브랜치의 DJ가 곡을 고르고 있어요 · 취향이 다르면 새 브랜치를 만들어보세요</p>}
       <button className="leave" onClick={onLeave}>나가기</button>
       {showAdd && (
         <Form fields={[['유튜브 링크', true]]} submitLabel="대기열에 추가"
           onSubmit={addToQueue} onClose={() => setShowAdd(false)} />
+      )}
+      {showBranch && (
+        <Form fields={[['브랜치 이름', true], ['유튜브 링크', true]]} submitLabel="여기서 분기"
+          onSubmit={(name, url) => onCreateBranch(name, url, channel.id)}
+          onClose={() => setShowBranch(false)} />
       )}
     </div>
   )
