@@ -302,10 +302,26 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   const TY = 240
   const trunkW = main ? Math.min(16 + main.listenerCount * 2, 34) : 16
 
-  // 자라남: 재생된 시간만큼 트렁크가 오른쪽으로 자람 (최대 10분까지)
-  const mainElapsed = main ? Math.min((now - main.startedAt) / 1000, 600) : 0
-  const trunkTip = Math.max(300 + mainElapsed * 0.9, 170 + subs.length * 120 + 90)
-  const W = Math.max(700, trunkTip + 150)
+  // 자라남: 파티룸이 열린 뒤 흐른 시간만큼 트렁크가 오른쪽으로 자람 (곡이 바뀌어도 리셋 안 됨, 최대 10분)
+  const mainBirth = main ? (main.createdAt ?? main.startedAt) : 0
+  const mainElapsed = main ? Math.min((now - mainBirth) / 1000, 600) : 0
+  const trunkTip = 300 + mainElapsed * 1.8
+
+  // 각 브랜치는 "생성된 시점의 트렁크 끝"에서 갈라져 나옴
+  const geo = subs.map((ch, i) => {
+    const side = i % 2 === 0 ? 1 : -1
+    const birth = ch.createdAt ?? ch.startedAt
+    const forkElapsed = Math.min(Math.max((birth - mainBirth) / 1000, 0), 600)
+    const branchX = 300 + forkElapsed * 1.8
+    // 브랜치도 생성된 뒤 흐른 시간만큼 자람
+    const bElapsed = Math.min((now - birth) / 1000, 300)
+    const bLen = 60 + bElapsed * 0.75
+    const endX = branchX + 55 + bLen * 0.4
+    const endY = TY + side * Math.min(65 + bLen * 0.5, 200)
+    return { ch, side, branchX, endX, endY }
+  })
+  const maxEndX = geo.reduce((m, g) => Math.max(m, g.endX), 0)
+  const W = Math.max(700, trunkTip + 150, maxEndX + 130)
 
   return (
     <svg viewBox={`0 0 ${W} 480`} width={W * scale} height={480 * scale}
@@ -319,10 +335,9 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        {main && subs.map((ch, i) => (
+        {main && geo.map(({ ch, branchX, endX, endY }) => (
           <linearGradient key={ch.id} id={`grad-${ch.id}`}
-            x1={170 + i * 120} y1={TY}
-            x2={250 + i * 120} y2={TY + (i % 2 === 0 ? 130 : -130)}
+            x1={branchX} y1={TY} x2={endX} y2={endY}
             gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor={main.colorHex} />
             <stop offset="100%" stopColor={ch.colorHex} />
@@ -355,17 +370,12 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
         </g>
       )}
 
-      {subs.map((ch, i) => {
-        const side = i % 2 === 0 ? 1 : -1
-        const branchX = 170 + i * 120
-        // 브랜치도 자기 곡이 재생된 만큼 자람
-        const bElapsed = Math.min((now - ch.startedAt) / 1000, 600)
-        const bLen = 60 + bElapsed * 0.12
-        const endX = branchX + 55 + bLen * 0.4
-        const endY = TY + side * (65 + bLen * 0.55)
+      {geo.map(({ ch, side, branchX, endX, endY }) => {
         const width = Math.min(3 + ch.listenerCount * 3, 22)
         return (
           <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
+            {/* 생성 시점의 트렁크 위치에서 갈라져 나옴 — 분기점 표시 점 */}
+            <circle cx={branchX} cy={TY} r="6" fill={main ? main.colorHex : '#fff'} />
             <path
               d={`M ${branchX} ${TY} C ${branchX + 8} ${TY + side * 55}, ${endX - 35} ${endY - side * 45}, ${endX} ${endY}`}
               fill="none" stroke={`url(#grad-${ch.id})`}
@@ -453,7 +463,8 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
   }, [channel.id])
 
   useEffect(() => {
-    let interval, fade, destroyed = false
+    let interval, fade, settleTimer, destroyed = false
+    let settled = false
     loadYT().then(YT => {
       if (destroyed) return
       new YT.Player('yt-player', {
@@ -463,13 +474,14 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
           onReady: (e) => {
             const p = e.target
             playerRef.current = p
-            const sync = () => {
+            const sync = (threshold) => {
               let expected = (Date.now() + offset - liveRef.current.startedAt) / 1000
               const dur = p.getDuration()
               if (dur > 0) expected = expected % dur
-              if (Math.abs(p.getCurrentTime() - expected) > 0.75) p.seekTo(expected, true)
+              if (Math.abs(p.getCurrentTime() - expected) > threshold) p.seekTo(expected, true)
             }
-            sync()
+            // 1) 입장 시 1회 동기화
+            sync(0)
             // 페이드인 입장 (크로스페이드 라이트)
             try {
               p.setVolume(0)
@@ -481,10 +493,25 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
               }, 140)
             } catch {}
             p.playVideo()
-            interval = setInterval(sync, 5000)
+            // 3) 이후엔 건드리지 않되, 3초 이상 크게 어긋난 경우만 비상 복구
+            //    (탭 백그라운드 스로틀·긴 버퍼링 복구용 — 정상 재생 중엔 발동 안 함)
+            interval = setInterval(() => sync(3), 15000)
           },
           onStateChange: (e) => {
             if (e.data === 0) requestNext()
+            // 2) 실제 재생이 시작된 직후 1회 정밀 보정
+            //    (최초 seek는 버퍼링 전에 실행돼 버퍼링 시간만큼 밀리는 것을 여기서 잡음)
+            if (e.data === 1 && !settled) {
+              settled = true
+              settleTimer = setTimeout(() => {
+                const p = playerRef.current
+                if (!p) return
+                let expected = (Date.now() + offset - liveRef.current.startedAt) / 1000
+                const dur = p.getDuration()
+                if (dur > 0) expected = expected % dur
+                if (Math.abs(p.getCurrentTime() - expected) > 0.4) p.seekTo(expected, true)
+              }, 1200)
+            }
           },
         },
       })
@@ -493,6 +520,7 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
       destroyed = true
       clearInterval(interval)
       clearInterval(fade)
+      clearTimeout(settleTimer)
       if (playerRef.current) playerRef.current.destroy()
     }
   }, [channel.id])

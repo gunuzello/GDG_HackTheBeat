@@ -10,6 +10,8 @@ public class Channel {
     public String name;
     public volatile String youtubeVideoId;
     public volatile long startedAt;
+    // 채널이 처음 생성된 시각 (곡이 바뀌어도 변하지 않음 — 나무 성장/분기점 기준)
+    public final long createdAt = System.currentTimeMillis();
     public String colorHex;
     public boolean isMain;
     public final List<String> queue = new CopyOnWriteArrayList<>();
@@ -46,6 +48,7 @@ public class Channel {
     public String getName() { return name; }
     public String getYoutubeVideoId() { return youtubeVideoId; }
     public long getStartedAt() { return startedAt; }
+    public long getCreatedAt() { return createdAt; }
     public String getColorHex() { return colorHex; }
     public boolean getIsMain() { return isMain; }
     public List<String> getQueue() { return queue; }
