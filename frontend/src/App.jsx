@@ -112,6 +112,8 @@ function Main({ profile }) {
   const [offset, setOffset] = useState(0)
   const [poke, setPoke] = useState(null)
   const [signal, setSignal] = useState(null)
+  const [announcement, setAnnouncement] = useState(null)
+  const [gather, setGather] = useState(null)
   const [pendingRoom, setPendingRoom] = useState(
     () => new URLSearchParams(window.location.search).get('room'))
 
@@ -148,6 +150,8 @@ function Main({ profile }) {
           setTimeout(() => setPoke(null), 3500)
         })
         client.subscribe(`/topic/signal/${profile.clientId}`, msg => setSignal(JSON.parse(msg.body)))
+        client.subscribe('/topic/announcement', msg => setAnnouncement(JSON.parse(msg.body)))
+        client.subscribe('/topic/gather', msg => setGather(JSON.parse(msg.body)))
       },
     })
     client.activate()
@@ -216,6 +220,22 @@ function Main({ profile }) {
     if (joined) fetch(`${API}/channels/${joined.id}/leave?clientId=${profile.clientId}`, { method: 'POST' })
     join(ch)
   }
+  useEffect(() => {
+    if (!gather || gather.roomId !== room?.id) return
+    const main = channels.find(ch => ch.id === gather.channelId)
+    if (main) switchTo(main)
+    setGather(null)
+  }, [gather, channels, room?.id])
+  useEffect(() => {
+    if (!announcement) return
+    const timer = setTimeout(() => setAnnouncement(null), 5000)
+    return () => clearTimeout(timer)
+  }, [announcement])
+
+  const hostAction = (path, body) => fetch(`${API}/rooms/${room.id}/${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 
   let view
   if (joined) {
@@ -224,7 +244,8 @@ function Main({ profile }) {
       onCreateBranch={createBranch} signal={signal} />
   } else if (room) {
     view = <BranchView room={room} channels={channels.filter(c => c.roomId === room.id)}
-      offset={offset} onJoin={join} onBack={() => setRoom(null)} onCreate={createBranch} />
+      offset={offset} onJoin={join} onBack={() => setRoom(null)} onCreate={createBranch}
+      onHostAction={hostAction} />
   } else {
     view = <RoomListView rooms={rooms} onEnter={enterRoom} onCreate={createRoom} />
   }
@@ -235,6 +256,9 @@ function Main({ profile }) {
         <div className="toast">
           {poke.fromEmoji} <b>{poke.fromNickname}</b>님이 콕 찔렀어요 — 이 곡 취향 저격이죠?
         </div>
+      )}
+      {announcement?.roomId === room?.id && (
+        <div className="toast host-toast">📢 {announcement.message}</div>
       )}
     </>
   )
@@ -280,7 +304,7 @@ function RoomListView({ rooms, onEnter, onCreate }) {
   )
 }
 
-function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
+function BranchView({ room, channels, offset, onJoin, onBack, onCreate, onHostAction }) {
   const [showForm, setShowForm] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [followLive, setFollowLive] = useState(true)
@@ -294,6 +318,12 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
   const subs = channels.filter(c => !c.isMain)
   const total = channels.reduce((s, c) => s + c.listenerCount, 0)
   const hottest = [...channels].sort((a, b) => b.listenerCount - a.listenerCount)[0]
+  const main = channels.find(ch => ch.isMain)
+  const ownerKey = main ? localStorage.getItem(`bt_owner_${main.id}`) : null
+  const announce = () => {
+    const message = prompt('전체 참가자에게 보낼 공지')
+    if (message) onHostAction('announce', { ownerKey, message })
+  }
 
   useEffect(() => {
     if (!followLive) return
@@ -314,6 +344,13 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
         </div>
         <button className="invite-btn" onClick={() => setShowInvite(true)}>친구 초대</button>
       </header>
+      {ownerKey && (
+        <div className="host-panel">
+          <span>DJ 운영 · {total}명 · {channels.length}개 가지</span>
+          <button onClick={announce}>전체 공지</button>
+          <button onClick={() => onHostAction('gather', { ownerKey })}>전원 메인 소환</button>
+        </div>
+      )}
       {showInvite && (
         <div className="form-sheet invite-sheet">
           <p className="invite-title">QR을 보여주거나 링크를 보내세요</p>
@@ -492,6 +529,7 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
   liveRef.current = live
   const [showAdd, setShowAdd] = useState(false)
   const [showBranch, setShowBranch] = useState(false)
+  const [needsPlay, setNeedsPlay] = useState(false)
   const [speakingTo, setSpeakingTo] = useState(null)
   const peerRef = useRef(null)
   const streamRef = useRef(null)
@@ -634,9 +672,11 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
               }, 140)
             } catch {}
             p.playVideo()
+            setTimeout(() => setNeedsPlay(p.getPlayerState?.() !== 1), 900)
             interval = setInterval(sync, 5000)
           },
           onStateChange: (e) => {
+            if (e.data === 1) setNeedsPlay(false)
             if (e.data === 0) requestNext()
           },
         },
@@ -675,6 +715,11 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
         {' · '}대기열 {live.queue?.length ?? 0}곡
       </p>
       <div className="yt-box"><div id="yt-player" /></div>
+      {needsPlay && (
+        <button className="play-fallback" onClick={() => {
+          playerRef.current?.playVideo?.(); setNeedsPlay(false)
+        }}>▶ 음악 재생하기</button>
+      )}
       {/* 이 파티룸의 나무: 탭하면 그 브랜치로 바로 이동 */}
       <div className="mini-tree" ref={miniTreeRef}>
         <TreeSvg channels={channels.filter(c => c.roomId === channel.roomId)}

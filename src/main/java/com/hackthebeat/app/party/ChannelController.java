@@ -172,6 +172,31 @@ public class ChannelController {
         return Map.of("status", "ok");
     }
 
+    @PostMapping("/rooms/{roomId}/announce")
+    public Map<String, String> announce(@PathVariable String roomId, @RequestBody Map<String, String> body) {
+        requireHost(roomId, body.get("ownerKey"));
+        messaging.convertAndSend("/topic/announcement",
+                Map.of("roomId", roomId, "message", body.getOrDefault("message", "호스트 공지")));
+        return Map.of("status", "ok");
+    }
+
+    @PostMapping("/rooms/{roomId}/gather")
+    public Map<String, String> gather(@PathVariable String roomId, @RequestBody Map<String, String> body) {
+        Channel main = requireHost(roomId, body.get("ownerKey"));
+        messaging.convertAndSend("/topic/gather", Map.of("roomId", roomId, "channelId", main.id));
+        return Map.of("status", "ok");
+    }
+
+    private Channel requireHost(String roomId, String ownerKey) {
+        Channel main = channels.values().stream()
+                .filter(channel -> channel.roomId.equals(roomId) && channel.isMain)
+                .findFirst().orElseThrow();
+        if (ownerKey == null || !ownerKey.equals(main.ownerKey()))
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "호스트 권한이 필요합니다.");
+        return main;
+    }
+
     private void broadcast() {
         messaging.convertAndSend("/topic/channels", listChannels());
         messaging.convertAndSend("/topic/rooms", listRooms());

@@ -162,6 +162,11 @@ body {
   box-shadow: 0 0 24px rgba(255, 46, 126, 0.4);
   animation: toastIn 0.25s ease;
 }
+.host-toast { top: 74px; border-color: #FFD93D; }
+.host-panel { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: #18182c; color: #bbb; font-size: 12px; }
+.host-panel span { flex: 1; }
+.host-panel button, .play-fallback { padding: 8px 12px; border: 1px solid #FFD93D; border-radius: 18px; background: #2a2512; color: #fff; cursor: pointer; }
+.play-fallback { font-size: 16px; padding: 12px 24px; }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -12px); } }
 
 /* 플레이어 화면 미니 나무 */
