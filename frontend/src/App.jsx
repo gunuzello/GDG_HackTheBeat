@@ -266,7 +266,7 @@ function Main({ profile }) {
           {poke.fromEmoji} <b>{poke.fromNickname}</b>님이 콕 찔렀어요 — 이 곡 취향 저격이죠?
         </div>
       )}
-      {announcement?.roomId === room?.id && (
+      {announcement && announcement.roomId === room?.id && (
         <div className="toast host-toast">📢 {announcement.message}</div>
       )}
     </>
