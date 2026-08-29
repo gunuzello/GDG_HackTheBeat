@@ -67,6 +67,10 @@ body {
 
 @keyframes trunkPulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
 .trunk-pulse { animation: trunkPulse 2.5s ease-in-out infinite; }
+@keyframes streamFlow { to { stroke-dashoffset: -36; } }
+@keyframes tipBeat { 0%, 100% { opacity: .8; } 50% { opacity: 1; transform: scale(1.28); } }
+.flow-branch { stroke-dasharray: 24 5; animation: streamFlow .55s linear infinite; }
+.growing-tip { transform-box: fill-box; transform-origin: center; animation: tipBeat .7s ease-in-out infinite; }
 
 .fab {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

@@ -337,7 +337,7 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
 function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   const [, setTick] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 2000)
+    const t = setInterval(() => setTick(x => x + 1), 120)
     return () => clearInterval(t)
   }, [])
 
@@ -348,25 +348,28 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
 
   const nodes = new Map()
   const children = new Map()
+  const growthLength = (channel, elapsed) => channel.isMain
+    ? Math.max(180, elapsed * 5)
+    : Math.max(100, elapsed * 4)
   subs.forEach(ch => children.set(ch.parentId, [...(children.get(ch.parentId) || []), ch]))
   const mainElapsed = Math.max(0, (now - main.startedAt) / 1000)
-  const mainLength = Math.max(100, Math.min(mainElapsed, 900) * 0.75)
+  const mainLength = growthLength(main, mainElapsed)
   nodes.set(main.id, { x1: 35, y1: 260, x2: 35 + mainLength, y2: 260, angle: 0, depth: 0 })
 
   const layoutChildren = (parent) => {
     const parentNode = nodes.get(parent.id)
     const list = children.get(parent.id) || []
     list.forEach((ch, index) => {
-      const splitDistance = Math.max(25, Math.min(
-        ch.parentElapsedSecondsAtCreation * 0.75,
+      const splitDistance = Math.min(
+        growthLength(parent, ch.parentElapsedSecondsAtCreation),
         Math.hypot(parentNode.x2 - parentNode.x1, parentNode.y2 - parentNode.y1),
-      ))
+      )
       const x1 = parentNode.x1 + Math.cos(parentNode.angle) * splitDistance
       const y1 = parentNode.y1 + Math.sin(parentNode.angle) * splitDistance
       const direction = index % 2 === 0 ? -1 : 1
       const angle = parentNode.angle + direction * (0.48 + Math.floor(index / 2) * 0.16)
       const elapsed = Math.max(0, (now - ch.startedAt) / 1000)
-      const length = Math.max(55, Math.min(elapsed, 900) * 0.55)
+      const length = growthLength(ch, elapsed)
       nodes.set(ch.id, {
         x1, y1,
         x2: x1 + Math.cos(angle) * length,
@@ -396,9 +399,9 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
       <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
         <path d={`M ${node.x1} ${node.y1} Q ${midX} ${midY + bend} ${node.x2} ${node.y2}`}
           fill="none" stroke={ch.colorHex} strokeWidth={width} strokeLinecap="round"
-          filter="url(#neonGlow)" style={{ transition: 'all 0.4s ease' }} />
+          filter="url(#neonGlow)" className="flow-branch" style={{ transition: 'stroke-width 0.25s ease' }} />
         <circle cx={node.x2} cy={node.y2} r={Math.max(9, width * 0.7)}
-          fill={ch.colorHex} filter="url(#neonGlow)" />
+          fill={ch.colorHex} filter="url(#neonGlow)" className="growing-tip" />
         {currentId === ch.id && <circle cx={node.x2} cy={node.y2} r={Math.max(16, width)}
           fill="none" stroke="#fff" strokeWidth="2" />}
         <text x={node.x2} y={node.y2 - 24} textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700">
