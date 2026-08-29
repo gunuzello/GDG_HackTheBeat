@@ -366,7 +366,7 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   const children = new Map()
   const growthLength = (channel, elapsed) => channel.isMain
     ? Math.max(180, elapsed * 5)
-    : Math.max(100, elapsed * 4)
+    : Math.max(0, elapsed * 4)
   subs.forEach(ch => children.set(ch.parentId, [...(children.get(ch.parentId) || []), ch]))
   const mainElapsed = Math.max(0, (now - (main.createdAt ?? main.startedAt)) / 1000)
   const mainLength = growthLength(main, mainElapsed)
@@ -433,9 +433,9 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
       : `M ${node.x1} ${node.y1} Q ${controlX} ${controlY} ${turnX} ${turnY} L ${node.x2} ${node.y2}`
     return (
       <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
-        <path d={path}
+        {node.length > 1 && <path d={path}
           fill="none" stroke={ch.colorHex} strokeWidth={width} strokeLinecap="round"
-          filter="url(#neonGlow)" className="flow-branch" style={{ transition: 'stroke-width 0.25s ease' }} />
+          filter="url(#neonGlow)" className="flow-branch" style={{ transition: 'stroke-width 0.25s ease' }} />}
         <circle cx={node.x2} cy={node.y2} r={Math.max(9, width * 0.7)}
           fill={ch.colorHex} filter="url(#neonGlow)" className="growing-tip" />
         {currentId === ch.id && <circle cx={node.x2} cy={node.y2} r={Math.max(16, width)}
