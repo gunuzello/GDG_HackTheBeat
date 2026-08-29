@@ -283,6 +283,8 @@ function RoomListView({ rooms, onEnter, onCreate }) {
 function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
   const [showForm, setShowForm] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
+  const [followLive, setFollowLive] = useState(true)
+  const canvasRef = useRef(null)
   const shareUrl = `${window.location.origin}?room=${room.id}`
   const copyLink = () => {
     navigator.clipboard?.writeText(shareUrl)
@@ -292,6 +294,15 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
   const subs = channels.filter(c => !c.isMain)
   const total = channels.reduce((s, c) => s + c.listenerCount, 0)
   const hottest = [...channels].sort((a, b) => b.listenerCount - a.listenerCount)[0]
+
+  useEffect(() => {
+    if (!followLive) return
+    const timer = setInterval(() => {
+      const canvas = canvasRef.current
+      if (canvas) canvas.scrollLeft = canvas.scrollWidth - canvas.clientWidth
+    }, 120)
+    return () => clearInterval(timer)
+  }, [followLive])
 
   return (
     <div className="screen">
@@ -314,9 +325,14 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
           </div>
         </div>
       )}
-      <div className="canvas-wrap">
+      <div className="canvas-wrap" ref={canvasRef}
+        onPointerDown={() => setFollowLive(false)}
+        onWheel={() => setFollowLive(false)}>
         <TreeSvg channels={channels} offset={offset} onJoin={onJoin} />
       </div>
+      {!followLive && (
+        <button className="follow-live" onClick={() => setFollowLive(true)}>현재 머리로 →</button>
+      )}
       {hottest && (
         <button className="hot-jump" onClick={() => onJoin(hottest)}>
           🔥 가장 핫한 가지로 점프 · {hottest.listenerCount}명
@@ -354,7 +370,17 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
   subs.forEach(ch => children.set(ch.parentId, [...(children.get(ch.parentId) || []), ch]))
   const mainElapsed = Math.max(0, (now - main.startedAt) / 1000)
   const mainLength = growthLength(main, mainElapsed)
-  nodes.set(main.id, { x1: 35, y1: 260, x2: 35 + mainLength, y2: 260, angle: 0, depth: 0 })
+  nodes.set(main.id, { x1: 35, y1: 260, x2: 35 + mainLength, y2: 260,
+    angle: 0, depth: 0, length: mainLength, bendLength: 0 })
+
+  const pointAt = (node, distance) => {
+    const d = Math.min(distance, node.length)
+    const bend = Math.min(d, node.bendLength)
+    return {
+      x: node.x1 + Math.cos(node.angle) * bend + Math.max(0, d - node.bendLength),
+      y: node.y1 + Math.sin(node.angle) * bend,
+    }
+  }
 
   const layoutChildren = (parent) => {
     const parentNode = nodes.get(parent.id)
@@ -364,18 +390,24 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
         growthLength(parent, ch.parentElapsedSecondsAtCreation),
         Math.hypot(parentNode.x2 - parentNode.x1, parentNode.y2 - parentNode.y1),
       )
-      const x1 = parentNode.x1 + Math.cos(parentNode.angle) * splitDistance
-      const y1 = parentNode.y1 + Math.sin(parentNode.angle) * splitDistance
+      const splitPoint = pointAt(parentNode, splitDistance)
+      const x1 = splitPoint.x
+      const y1 = splitPoint.y
       const direction = index % 2 === 0 ? -1 : 1
       const angle = parentNode.angle + direction * (0.48 + Math.floor(index / 2) * 0.16)
       const elapsed = Math.max(0, (now - ch.startedAt) / 1000)
       const length = growthLength(ch, elapsed)
+      const bendLength = Math.min(115, length)
+      const turnX = x1 + Math.cos(angle) * bendLength
+      const turnY = y1 + Math.sin(angle) * bendLength
       nodes.set(ch.id, {
         x1, y1,
-        x2: x1 + Math.cos(angle) * length,
-        y2: y1 + Math.sin(angle) * length,
+        x2: turnX + Math.max(0, length - bendLength),
+        y2: turnY,
         angle,
         depth: parentNode.depth + 1,
+        length,
+        bendLength,
       })
       layoutChildren(ch)
     })
@@ -392,12 +424,16 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
     const width = ch.isMain
       ? Math.min(16 + ch.listenerCount * 2, 34)
       : Math.min(4 + ch.listenerCount * 3, 22)
-    const midX = (node.x1 + node.x2) / 2
-    const midY = (node.y1 + node.y2) / 2
-    const bend = ch.isMain ? 8 : (node.y2 < node.y1 ? -18 : 18)
+    const turnX = node.x1 + Math.cos(node.angle) * node.bendLength
+    const turnY = node.y1 + Math.sin(node.angle) * node.bendLength
+    const controlX = (node.x1 + turnX) / 2
+    const controlY = node.y1 + (turnY - node.y1) * 0.72
+    const path = ch.isMain
+      ? `M ${node.x1} ${node.y1} L ${node.x2} ${node.y2}`
+      : `M ${node.x1} ${node.y1} Q ${controlX} ${controlY} ${turnX} ${turnY} L ${node.x2} ${node.y2}`
     return (
       <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
-        <path d={`M ${node.x1} ${node.y1} Q ${midX} ${midY + bend} ${node.x2} ${node.y2}`}
+        <path d={path}
           fill="none" stroke={ch.colorHex} strokeWidth={width} strokeLinecap="round"
           filter="url(#neonGlow)" className="flow-branch" style={{ transition: 'stroke-width 0.25s ease' }} />
         <circle cx={node.x2} cy={node.y2} r={Math.max(9, width * 0.7)}

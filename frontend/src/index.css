@@ -64,6 +64,12 @@ body {
   width: 38px; height: 38px; border-radius: 12px; font-size: 22px; cursor: pointer;
 }
 .canvas-wrap { flex: 1; overflow-y: auto; }
+.canvas-wrap { overflow-x: auto; }
+.follow-live {
+  position: fixed; right: 16px; bottom: 145px; z-index: 21;
+  padding: 10px 16px; border: 1px solid #00E5FF; border-radius: 22px;
+  background: #101528; color: #fff; font-weight: 700; cursor: pointer;
+}
 
 @keyframes trunkPulse { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
 .trunk-pulse { animation: trunkPulse 2.5s ease-in-out infinite; }
