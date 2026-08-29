@@ -4,7 +4,7 @@ Spring Boot와 React로 구성한 해커톤용 스타터입니다. 개발 중에
 
 ## 기술 스택
 
-- Java 21, Spring Boot 3.5, Maven
+- Java 17, Spring Boot 3.5, Maven
 - React 19, Vite 7, JavaScript
 
 ## 개발 실행

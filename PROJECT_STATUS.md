@@ -11,7 +11,7 @@
 
 ### 백엔드
 
-- Java 21 및 Spring Boot 3.5 기반 Maven 프로젝트 구성
+- Java 17 및 Spring Boot 3.5 기반 Maven 프로젝트 구성
 - 애플리케이션 진입점 생성
 - `GET /api/health` 상태 확인 API 구현
 - 일관된 JSON 오류 응답을 위한 전역 예외 처리 추가

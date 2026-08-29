@@ -3,6 +3,7 @@ package com.hackthebeat.app.party;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Channel {
     public String id;
@@ -12,15 +13,18 @@ public class Channel {
     public volatile long startedAt;
     public String colorHex;
     public boolean isMain;
+    public String parentId;
     public final List<String> queue = new CopyOnWriteArrayList<>();
     private final List<Map<String, String>> riders = new CopyOnWriteArrayList<>();
+    private final Map<String, Long> lastSeen = new ConcurrentHashMap<>();
     private String ownerKey;
 
     // getter 형태가 아니라서 JSON 직렬화에 노출되지 않음
     public String ownerKey() { return ownerKey; }
     public void setOwnerKey(String key) { this.ownerKey = key; }
 
-    public Channel(String id, String roomId, String name, String videoId, String colorHex, boolean isMain) {
+    public Channel(String id, String roomId, String name, String videoId, String colorHex, boolean isMain,
+                   String parentId) {
         this.id = id;
         this.roomId = roomId;
         this.name = name;
@@ -28,6 +32,7 @@ public class Channel {
         this.startedAt = System.currentTimeMillis();
         this.colorHex = colorHex;
         this.isMain = isMain;
+        this.parentId = parentId;
     }
 
     public int getListenerCount() { return riders.size(); }
@@ -36,9 +41,19 @@ public class Channel {
         String cid = rider.get("clientId");
         riders.removeIf(r -> r.get("clientId").equals(cid));
         riders.add(rider);
+        lastSeen.put(cid, System.currentTimeMillis());
     }
     public void leave(String clientId) {
-        if (clientId != null) riders.removeIf(r -> clientId.equals(r.get("clientId")));
+        if (clientId != null) {
+            riders.removeIf(r -> clientId.equals(r.get("clientId")));
+            lastSeen.remove(clientId);
+        }
+    }
+    public boolean removeStaleRiders(long cutoff) {
+        int before = riders.size();
+        riders.removeIf(r -> lastSeen.getOrDefault(r.get("clientId"), 0L) < cutoff);
+        lastSeen.entrySet().removeIf(entry -> entry.getValue() < cutoff);
+        return riders.size() != before;
     }
 
     public String getId() { return id; }
@@ -48,5 +63,6 @@ public class Channel {
     public long getStartedAt() { return startedAt; }
     public String getColorHex() { return colorHex; }
     public boolean getIsMain() { return isMain; }
+    public String getParentId() { return parentId; }
     public List<String> getQueue() { return queue; }
 }

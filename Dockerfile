@@ -5,7 +5,7 @@ RUN npm ci
 COPY frontend ./
 RUN npm run build
 
-FROM eclipse-temurin:21-jdk AS backend-build
+FROM eclipse-temurin:17-jdk AS backend-build
 WORKDIR /app
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
@@ -14,7 +14,7 @@ COPY src src
 COPY --from=frontend-build /frontend/dist src/main/resources/static
 RUN ./mvnw clean package -DskipTests
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=backend-build /app/target/*.jar app.jar
 EXPOSE 8080

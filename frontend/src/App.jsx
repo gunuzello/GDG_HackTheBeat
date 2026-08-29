@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
 
 const HOST = window.location.hostname
-const API = import.meta.env.VITE_API_URL || `http://${HOST}:8081`
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${HOST}:8081/ws`
+const API = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? `http://${HOST}:8080` : '')
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss' : 'ws'
+const WS_URL = import.meta.env.VITE_WS_URL || (import.meta.env.DEV
+  ? `ws://${HOST}:8080/ws`
+  : `${WS_PROTOCOL}://${window.location.host}/ws`)
 
 let ytReady = null
 function loadYT() {
@@ -58,6 +61,24 @@ const EMOJIS = ['🎧', '🔥', '🪩', '⚡', '💃', '🕺', '🌙', '🍸', '
 function Onboarding({ onDone }) {
   const [nickname, setNickname] = useState('')
   const [emoji, setEmoji] = useState('🎧')
+  const [headphonesChecked, setHeadphonesChecked] = useState(false)
+  const testHeadphones = () => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const play = (pan, delay) => {
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const panner = ctx.createStereoPanner()
+      oscillator.frequency.value = pan < 0 ? 440 : 660
+      panner.pan.value = pan
+      gain.gain.value = 0.15
+      oscillator.connect(gain).connect(panner).connect(ctx.destination)
+      oscillator.start(ctx.currentTime + delay)
+      oscillator.stop(ctx.currentTime + delay + 0.35)
+    }
+    play(-1, 0)
+    play(1, 0.5)
+    setHeadphonesChecked(true)
+  }
   return (
     <div className="onboard">
       <h1 className="logo">BEATTREE</h1>
@@ -70,8 +91,12 @@ function Onboarding({ onDone }) {
             onClick={() => setEmoji(em)}>{em}</button>
         ))}
       </div>
+      <button className="headphone-test" onClick={testHeadphones}>
+        {headphonesChecked ? '✓ 이어폰 좌우 확인 완료' : '🎧 이어폰 좌우 테스트'}
+      </button>
       <button className="fab-static" onClick={() => {
         if (!nickname.trim()) { alert('닉네임을 입력해주세요'); return }
+        if (!headphonesChecked) { alert('이어폰 테스트를 먼저 해주세요'); return }
         const clientId = (crypto.randomUUID?.() || Math.random().toString(36).slice(2))
         onDone({ clientId, nickname: nickname.trim(), emoji })
       }}>파티 입장 🎉</button>
@@ -127,6 +152,18 @@ function Main({ profile }) {
     return () => client.deactivate()
   }, [])
 
+  useEffect(() => {
+    if (!joined) return
+    const heartbeat = setInterval(() => {
+      fetch(`${API}/channels/${joined.id}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      })
+    }, 15000)
+    return () => clearInterval(heartbeat)
+  }, [joined?.id])
+
   const join = async (ch) => {
     await fetch(`${API}/channels/${ch.id}/join`, {
       method: 'POST',
@@ -139,13 +176,13 @@ function Main({ profile }) {
     if (joined) fetch(`${API}/channels/${joined.id}/leave?clientId=${profile.clientId}`, { method: 'POST' })
     setJoined(null)
   }
-  const createBranch = async (name, url) => {
+  const createBranch = async (name, url, parentChannelId = null) => {
     const videoId = extractVideoId(url)
     if (!name || !videoId) { alert('브랜치 이름과 유튜브 링크를 확인해주세요'); return false }
     const res = await fetch(`${API}/rooms/${room.id}/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, youtubeVideoId: videoId }),
+      body: JSON.stringify({ name, youtubeVideoId: videoId, parentChannelId }),
     })
     const { channel, ownerKey } = await res.json()
     try { localStorage.setItem(`bt_owner_${channel.id}`, ownerKey) } catch {}
@@ -181,7 +218,8 @@ function Main({ profile }) {
   let view
   if (joined) {
     view = <PlayerView key={joined.id} channel={joined} offset={offset} channels={channels}
-      roomName={room?.name} profile={profile} onLeave={leave} onSwitch={switchTo} />
+      roomName={room?.name} profile={profile} onLeave={leave} onSwitch={switchTo}
+      onCreateBranch={createBranch} />
   } else if (room) {
     view = <BranchView room={room} channels={channels.filter(c => c.roomId === room.id)}
       offset={offset} onJoin={join} onBack={() => setRoom(null)} onCreate={createBranch} />
@@ -251,6 +289,7 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
   }
   const subs = channels.filter(c => !c.isMain)
   const total = channels.reduce((s, c) => s + c.listenerCount, 0)
+  const hottest = [...channels].sort((a, b) => b.listenerCount - a.listenerCount)[0]
 
   return (
     <div className="screen">
@@ -276,6 +315,11 @@ function BranchView({ room, channels, offset, onJoin, onBack, onCreate }) {
       <div className="canvas-wrap">
         <TreeSvg channels={channels} offset={offset} onJoin={onJoin} />
       </div>
+      {hottest && (
+        <button className="hot-jump" onClick={() => onJoin(hottest)}>
+          🔥 가장 핫한 가지로 점프 · {hottest.listenerCount}명
+        </button>
+      )}
       {showForm ? (
         <Form fields={[['브랜치 이름', true], ['유튜브 링크', true]]}
           submitLabel="브랜치 만들기"
@@ -321,8 +365,7 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
         </filter>
         {main && subs.map((ch, i) => (
           <linearGradient key={ch.id} id={`grad-${ch.id}`}
-            x1={170 + i * 120} y1={TY}
-            x2={250 + i * 120} y2={TY + (i % 2 === 0 ? 130 : -130)}
+            x1="0" y1="0" x2="1" y2="1"
             gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor={main.colorHex} />
             <stop offset="100%" stopColor={ch.colorHex} />
@@ -356,18 +399,22 @@ function TreeSvg({ channels, offset, onJoin, scale = 1, currentId = null }) {
       )}
 
       {subs.map((ch, i) => {
+        const parentIndex = subs.findIndex(candidate => candidate.id === ch.parentId)
+        const depth = parentIndex >= 0 ? 2 : 1
         const side = i % 2 === 0 ? 1 : -1
-        const branchX = 170 + i * 120
+        const parentX = parentIndex >= 0 ? 260 + parentIndex * 105 : 170 + i * 105
+        const parentY = parentIndex >= 0 ? TY + (parentIndex % 2 === 0 ? 1 : -1) * 120 : TY
+        const branchX = parentX
         // 브랜치도 자기 곡이 재생된 만큼 자람
         const bElapsed = Math.min((now - ch.startedAt) / 1000, 600)
         const bLen = 60 + bElapsed * 0.12
         const endX = branchX + 55 + bLen * 0.4
-        const endY = TY + side * (65 + bLen * 0.55)
+        const endY = parentY + side * (55 + bLen * 0.45 / depth)
         const width = Math.min(3 + ch.listenerCount * 3, 22)
         return (
           <g key={ch.id} onClick={() => onJoin(ch)} style={{ cursor: 'pointer' }}>
             <path
-              d={`M ${branchX} ${TY} C ${branchX + 8} ${TY + side * 55}, ${endX - 35} ${endY - side * 45}, ${endX} ${endY}`}
+              d={`M ${branchX} ${parentY} C ${branchX + 8} ${parentY + side * 45}, ${endX - 35} ${endY - side * 35}, ${endX} ${endY}`}
               fill="none" stroke={`url(#grad-${ch.id})`}
               strokeWidth={width} strokeLinecap="round"
               filter="url(#neonGlow)"
@@ -408,13 +455,14 @@ function Form({ fields, submitLabel, onSubmit, onClose }) {
   )
 }
 
-function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch }) {
+function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onSwitch, onCreateBranch }) {
   const playerRef = useRef(null)
   const loadedIdRef = useRef(channel.youtubeVideoId)
   const live = channels.find(c => c.id === channel.id) || channel
   const liveRef = useRef(live)
   liveRef.current = live
   const [showAdd, setShowAdd] = useState(false)
+  const [showBranch, setShowBranch] = useState(false)
   let ownerKey = null
   try { ownerKey = localStorage.getItem(`bt_owner_${channel.id}`) } catch {}
   const isOwner = !!ownerKey
@@ -424,7 +472,7 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
     fetch(`${API}/channels/${channel.id}/next`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fromVideoId: liveRef.current.youtubeVideoId }),
+      body: JSON.stringify({ fromVideoId: liveRef.current.youtubeVideoId, ownerKey }),
     })
   }
   const addToQueue = async (url) => {
@@ -544,11 +592,17 @@ function PlayerView({ channel, offset, channels, roomName, profile, onLeave, onS
             style={{ opacity: live.queue?.length ? 1 : 0.4 }}>다음 곡 ▶</button>
         </div>
       )}
+      <button className="branch-here" onClick={() => setShowBranch(true)}>⑂ 여기서 새 가지 만들기</button>
       {!isOwner && <p className="dj-note">이 브랜치의 DJ가 곡을 고르고 있어요 · 취향이 다르면 새 브랜치를 만들어보세요</p>}
       <button className="leave" onClick={onLeave}>나가기</button>
       {showAdd && (
         <Form fields={[['유튜브 링크', true]]} submitLabel="대기열에 추가"
           onSubmit={addToQueue} onClose={() => setShowAdd(false)} />
+      )}
+      {showBranch && (
+        <Form fields={[['브랜치 이름', true], ['유튜브 링크', true]]} submitLabel="여기서 분기"
+          onSubmit={(name, url) => onCreateBranch(name, url, channel.id)}
+          onClose={() => setShowBranch(false)} />
       )}
     </div>
   )

@@ -138,6 +138,11 @@ body {
   color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
   box-shadow: 0 0 24px rgba(255, 46, 126, 0.5);
 }
+.headphone-test, .hot-jump, .branch-here {
+  padding: 12px 18px; border-radius: 24px; border: 1px solid #00E5FF;
+  background: rgba(0, 229, 255, 0.1); color: #fff; font-weight: 700; cursor: pointer;
+}
+.hot-jump { position: fixed; left: 50%; bottom: 82px; transform: translateX(-50%); z-index: 19; white-space: nowrap; }
 
 /* 콕 찌르기 토스트 */
 .toast {
