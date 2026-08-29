@@ -155,7 +155,12 @@ body {
   padding: 12px 18px; border-radius: 24px; border: 1px solid #00E5FF;
   background: rgba(0, 229, 255, 0.1); color: #fff; font-weight: 700; cursor: pointer;
 }
-.hot-jump { position: fixed; left: 50%; bottom: 82px; transform: translateX(-50%); z-index: 19; white-space: nowrap; }
+.hot-jump {
+  position: fixed; top: 82px; right: 16px; left: auto; bottom: auto;
+  transform: none; z-index: 24; white-space: nowrap;
+  background: #101528; border-color: #00E5FF;
+  box-shadow: 0 0 18px rgba(0, 229, 255, .28);
+}
 
 /* 콕 찌르기 토스트 */
 .toast {
